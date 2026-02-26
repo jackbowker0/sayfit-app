@@ -1,13 +1,23 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { PostHogProvider } from 'posthog-react-native';
 
 import { ThemeProvider, ThemeContext } from './src/context/ThemeContext';
+import { AuthProvider, AuthContext } from './src/context/AuthContext';
 import { WorkoutProvider } from './src/context/WorkoutContext';
+import linking from './src/config/linking';
+import {
+  registerForPushNotifications,
+  addNotificationResponseListener,
+  getNotificationRoute,
+} from './src/services/notifications';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import TabBar from './src/components/TabBar';
+import { COACHES } from './src/constants/coaches';
 import WorkoutScreen from './src/screens/WorkoutScreen';
 import CompleteScreen from './src/screens/CompleteScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -20,6 +30,14 @@ import WeightScreen from './src/screens/WeightScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AchievementsScreen from './src/screens/AchievementsScreen';
+import AuthScreen from './src/screens/AuthScreen';
+import ShareCustomizerScreen from './src/screens/ShareCustomizerScreen';
+import SocialFeedScreen from './src/screens/SocialFeedScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
+import PostDetailScreen from './src/screens/PostDetailScreen';
+import ChallengesScreen from './src/screens/ChallengesScreen';
+import ChallengeDetailScreen from './src/screens/ChallengeDetailScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import { hasOnboarded, getUserProfile } from './src/services/userProfile';
 
 const Stack = createNativeStackNavigator();
@@ -27,69 +45,25 @@ const Tab = createBottomTabNavigator();
 
 // ─── Tab Bar Screens ─────────────────────────────
 function HomeTabs() {
-  const { colors, isDark } = useContext(ThemeContext);
+  const [coachColor, setCoachColor] = useState(null);
+
+  useEffect(() => {
+    getUserProfile().then((profile) => {
+      const coach = COACHES[profile.coachId || 'drill'];
+      if (coach) setCoachColor(coach.color);
+    });
+  }, []);
 
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.bgCard,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 85,
-          paddingBottom: 30,
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: colors.textPrimary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-          marginTop: 2,
-        },
-      }}
+      tabBar={(props) => <TabBar {...props} coachColor={coachColor} />}
+      screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen
-        name="DashboardTab"
-        component={DashboardScreen}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ focused, color }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>🏠</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="WorkoutTab"
-        component={JustTalkScreen}
-        options={{
-          tabBarLabel: 'Train',
-          tabBarIcon: ({ focused, color }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>💪</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="LogTab"
-        component={LogWorkoutScreen}
-        options={{
-          tabBarLabel: 'Gym Log',
-          tabBarIcon: ({ focused, color }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>📝</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="ProgressTab"
-        component={ProgressScreen}
-        options={{
-          tabBarLabel: 'Progress',
-          tabBarIcon: ({ focused, color }) => (
-            <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>📊</Text>
-          ),
-        }}
-      />
+      <Tab.Screen name="DashboardTab" component={DashboardScreen} />
+      <Tab.Screen name="WorkoutTab" component={JustTalkScreen} />
+      <Tab.Screen name="LogTab" component={LogWorkoutScreen} />
+      <Tab.Screen name="CommunityTab" component={SocialFeedScreen} />
+      <Tab.Screen name="ProgressTab" component={ProgressScreen} />
     </Tab.Navigator>
   );
 }
@@ -97,10 +71,30 @@ function HomeTabs() {
 // ─── Root Stack (wraps tabs + full-screen flows) ───
 function AppInner({ onboarded, needsTutorial }) {
   const { isDark, colors } = useContext(ThemeContext);
+  const { isAuthenticated } = useContext(AuthContext);
+  const navigationRef = useRef(null);
+
+  // Register for push notifications when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      registerForPushNotifications().catch(() => {});
+    }
+  }, [isAuthenticated]);
+
+  // Handle notification taps — navigate to the relevant screen
+  useEffect(() => {
+    const sub = addNotificationResponseListener((response) => {
+      const route = getNotificationRoute(response.notification);
+      if (route && navigationRef.current) {
+        navigationRef.current.navigate(route.screen, route.params);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   return (
     <WorkoutProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef} linking={linking}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Stack.Navigator
           screenOptions={{
@@ -122,6 +116,13 @@ function AppInner({ onboarded, needsTutorial }) {
           <Stack.Screen name="Achievements" component={AchievementsScreen} />
           <Stack.Screen name="Workout" component={WorkoutScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen name="Complete" component={CompleteScreen} />
+          <Stack.Screen name="Auth" component={AuthScreen} />
+          <Stack.Screen name="ShareCustomizer" component={ShareCustomizerScreen} />
+          <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+          <Stack.Screen name="PostDetail" component={PostDetailScreen} />
+          <Stack.Screen name="Challenges" component={ChallengesScreen} />
+          <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} />
+          <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </WorkoutProvider>
@@ -162,11 +163,26 @@ export default function App() {
     );
   }
 
-  return (
+  const appContent = (
     <ErrorBoundary>
       <ThemeProvider>
-        <AppInner onboarded={onboarded} needsTutorial={needsTutorial} />
+        <AuthProvider>
+          <AppInner onboarded={onboarded} needsTutorial={needsTutorial} />
+        </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
+  );
+
+  if (!process.env.EXPO_PUBLIC_POSTHOG_API_KEY) {
+    return appContent;
+  }
+
+  return (
+    <PostHogProvider
+      apiKey={process.env.EXPO_PUBLIC_POSTHOG_API_KEY}
+      options={{ host: process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com' }}
+    >
+      {appContent}
+    </PostHogProvider>
   );
 }

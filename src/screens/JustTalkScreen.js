@@ -2,15 +2,24 @@
 // JUST TALK SCREEN — Conversational + Manual workout builder
 // NEW: Toggle between "Talk" mode (natural language) and
 // "Build" mode (manual exercise search/autofill builder)
+// Premium dark UI redesign — Lucide icons, GlassCard,
+// FadeInView animations, design tokens
 // ============================================================
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  Animated, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
+import FadeInView from '../components/FadeInView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+
+import {
+  Zap, Flame, Dumbbell, Footprints, Waves, Moon, Sparkles, Target, Mountain,
+  MessageCircle, Swords, RefreshCw, Pencil, Clock, Send, ArrowRight,
+} from 'lucide-react-native';
+import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import {
@@ -19,34 +28,53 @@ import {
 import { getCoachResponse } from '../services/ai';
 import { COACHES, getFallbackResponse } from '../constants/coaches';
 import { EXERCISES } from '../constants/exercises';
-import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getUserProfile } from '../services/userProfile';
 import ExerciseSearch from '../components/ExerciseSearch';
+import GlassCard from '../components/GlassCard';
 import * as haptics from '../services/haptics';
+import { capture } from '../services/posthog';
 
 // ─── PRESETS BY FITNESS LEVEL ─────────────────────────────────────
 
 const ALL_PRESETS = [
-  { label: '⚡ 5 Min Burn', value: '5 minutes intense full body quick', levels: ['intermediate', 'advanced'] },
-  { label: '🔥 10 Min HIIT', value: '10 minutes intense cardio hiit', levels: ['intermediate', 'advanced'] },
-  { label: '💪 Quick Arms', value: '10 minutes upper body arms', levels: ['all'] },
-  { label: '🦵 Leg Day', value: '20 minutes legs lower body', levels: ['all'] },
-  { label: '🧘 Easy Core', value: '15 minutes easy core abs', levels: ['all'] },
-  { label: '🏋️ 20 Min Full', value: '20 minutes moderate full body', levels: ['all'] },
-  { label: '😴 Low Energy', value: '15 minutes tired easy gentle', levels: ['all'] },
-  { label: '🔥 30 Min Beast', value: '30 minutes intense full body beast mode', levels: ['intermediate', 'advanced'] },
-  { label: '🌱 Gentle Start', value: '10 minutes easy full body beginner', levels: ['beginner'] },
-  { label: '🍑 Glute Focus', value: '15 minutes glutes booty', levels: ['all'] },
-  { label: '🏔️ Core Burner', value: '10 minutes intense core', levels: ['intermediate', 'advanced'] },
-  { label: '🧘 Stretch', value: '15 minutes easy stretch flexibility', levels: ['all'] },
+  { label: '5 Min Burn', Icon: Zap, value: '5 minutes intense full body quick', levels: ['intermediate', 'advanced'] },
+  { label: '10 Min HIIT', Icon: Flame, value: '10 minutes intense cardio hiit', levels: ['intermediate', 'advanced'] },
+  { label: 'Quick Arms', Icon: Dumbbell, value: '10 minutes upper body arms', levels: ['all'] },
+  { label: 'Leg Day', Icon: Footprints, value: '20 minutes legs lower body', levels: ['all'] },
+  { label: 'Easy Core', Icon: Waves, value: '15 minutes easy core abs', levels: ['all'] },
+  { label: '20 Min Full', Icon: Dumbbell, value: '20 minutes moderate full body', levels: ['all'] },
+  { label: 'Low Energy', Icon: Moon, value: '15 minutes tired easy gentle', levels: ['all'] },
+  { label: '30 Min Beast', Icon: Flame, value: '30 minutes intense full body beast mode', levels: ['intermediate', 'advanced'] },
+  { label: 'Gentle Start', Icon: Sparkles, value: '10 minutes easy full body beginner', levels: ['beginner'] },
+  { label: 'Glute Focus', Icon: Target, value: '15 minutes glutes booty', levels: ['all'] },
+  { label: 'Core Burner', Icon: Mountain, value: '10 minutes intense core', levels: ['intermediate', 'advanced'] },
+  { label: 'Stretch', Icon: Waves, value: '15 minutes easy stretch flexibility', levels: ['all'] },
 ];
 
 // ─── MODE TOGGLE LABELS ──────────────────────────────────────────
 
 const MODE_LABELS = {
-  talk: { icon: '💬', label: 'Talk' },
-  build: { icon: '🔧', label: 'Build' },
+  talk: { Icon: MessageCircle, label: 'Talk' },
+  build: { Icon: Swords, label: 'Build' },
+};
+
+// ─── ENERGY ICONS ────────────────────────────────────────────────
+
+const ENERGY_ICONS = { low: Waves, medium: Dumbbell, high: Flame };
+const ENERGY_LABELS = { low: 'Easy', medium: 'Moderate', high: 'Intense' };
+
+// ─── FITNESS LEVEL ICONS ─────────────────────────────────────────
+
+const LEVEL_ICONS = { beginner: Sparkles, intermediate: Flame, advanced: Zap };
+
+// ─── PHASE LABELS ────────────────────────────────────────────────
+
+const PHASE_CONFIG = {
+  warmup: { Icon: RefreshCw, label: 'WARM-UP' },
+  main: { Icon: Dumbbell, label: 'MAIN' },
+  cooldown: { Icon: Waves, label: 'COOL-DOWN' },
 };
 
 export default function JustTalkScreen() {
@@ -56,6 +84,7 @@ export default function JustTalkScreen() {
   const { coachId } = contextValue;
   const coach = COACHES[coachId];
   const { colors, isDark } = useTheme();
+  const CoachIcon = COACH_ICONS[coachId] || COACH_ICONS.drill;
 
   // ─── SHARED STATE ─────────────────────────────────────────────
   const [mode, setMode] = useState('talk'); // 'talk' | 'build'
@@ -68,10 +97,6 @@ export default function JustTalkScreen() {
   // ─── BUILD MODE STATE ─────────────────────────────────────────
   const [manualExercises, setManualExercises] = useState([]);
   const [workoutName, setWorkoutName] = useState('');
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const modeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     getUserProfile().then(p => setProfile(p));
@@ -87,15 +112,6 @@ export default function JustTalkScreen() {
     // Clear the param so it doesn't re-trigger
     navigation.setParams({ repeatWorkout: undefined });
   }, [route.params?.repeatWorkout]);
-
-  // Animate mode switch
-  useEffect(() => {
-    Animated.timing(modeAnim, {
-      toValue: mode === 'build' ? 1 : 0,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-  }, [mode]);
 
   // Filter presets by fitness level
   const presets = ALL_PRESETS.filter(p =>
@@ -137,20 +153,21 @@ export default function JustTalkScreen() {
       setWorkout(generatedWorkout);
       setPhase('preview');
       haptics.success();
-
-      fadeAnim.setValue(0);
-      slideAnim.setValue(30);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]).start();
     } catch (e) {
       console.warn('[JustTalk] Generation failed:', e);
       setPhase('input');
+      Alert.alert(
+        'Generation Failed',
+        'Could not create your workout. Check your connection and try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => handleGenerate(requestText) },
+        ]
+      );
     } finally {
       setGenerating(false);
     }
-  }, [input, generating, fadeAnim, slideAnim]);
+  }, [input, generating]);
 
   // ─── BUILD MODE: ADD/REMOVE EXERCISES ─────────────────────────
 
@@ -234,14 +251,23 @@ export default function JustTalkScreen() {
 
   // ─── REGENERATE / RESET ───────────────────────────────────────
 
-  const handleRegenerate = useCallback(() => {
-    if (!parsed) return;
+  const handleRegenerate = useCallback(async () => {
+    if (!parsed || generating) return;
     haptics.tap();
-    const newWorkout = generateWorkout(parsed);
-    setWorkout(newWorkout);
-    fadeAnim.setValue(0.3);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-  }, [parsed, fadeAnim]);
+    setGenerating(true);
+    setPhase('loading');
+    try {
+      const newWorkout = await generateWorkout(parsed);
+      setWorkout(newWorkout);
+      setPhase('preview');
+    } catch (e) {
+      console.warn('[JustTalk] Shuffle failed:', e);
+      setPhase('preview');
+      Alert.alert('Shuffle Failed', 'Could not generate a new workout. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
+  }, [parsed, generating]);
 
   const handleBack = useCallback(() => {
     haptics.tap();
@@ -259,8 +285,8 @@ export default function JustTalkScreen() {
     return profile.equipment.map(e => labels[e] || e).join(', ');
   };
 
-  const getLevelEmoji = () => {
-    return { beginner: '🌱', intermediate: '🔥', advanced: '⚡' }[profile?.fitnessLevel] || '🔥';
+  const getLevelIcon = () => {
+    return LEVEL_ICONS[profile?.fitnessLevel] || LEVEL_ICONS.intermediate;
   };
 
   const getEstimatedTime = () => {
@@ -272,13 +298,18 @@ export default function JustTalkScreen() {
   // ─── RENDER: MODE TOGGLE ─────────────────────────────────────
 
   const renderModeToggle = () => (
-    <View style={{
-      flexDirection: 'row', marginBottom: 20, marginHorizontal: SPACING.lg,
-      backgroundColor: colors.bgSubtle, borderRadius: RADIUS.md, padding: 3,
-      borderWidth: 1, borderColor: colors.border,
-    }}>
+    <FadeInView
+      from="none"
+      style={{
+        flexDirection: 'row', marginBottom: 20, marginHorizontal: SPACING.lg,
+        backgroundColor: isDark ? colors.glassBg : colors.bgSubtle,
+        borderRadius: RADIUS.md, padding: 3,
+        borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+      }}
+    >
       {['talk', 'build'].map(m => {
         const isActive = mode === m;
+        const ModeIcon = MODE_LABELS[m].Icon;
         return (
           <TouchableOpacity
             key={m}
@@ -293,26 +324,26 @@ export default function JustTalkScreen() {
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={`${MODE_LABELS[m].label} mode`}
           >
-            <Text style={{ fontSize: 14 }}>{MODE_LABELS[m].icon}</Text>
-            <Text style={{ fontSize: 14, fontWeight: isActive ? '700' : '500', color: isActive ? colors.textPrimary : colors.textMuted }}>
+            <ModeIcon size={14} color={isActive ? colors.textPrimary : colors.textMuted} />
+            <Text style={{ ...FONT.caption, fontWeight: isActive ? '700' : '500', color: isActive ? colors.textPrimary : colors.textMuted }}>
               {MODE_LABELS[m].label}
             </Text>
           </TouchableOpacity>
         );
       })}
-    </View>
+    </FadeInView>
   );
 
   // ─── RENDER: BUILD MODE INPUT ─────────────────────────────────
 
   const renderBuildMode = () => (
-    <View style={{ flex: 1, paddingHorizontal: SPACING.lg }}>
+    <FadeInView from="none" style={{ flex: 1, paddingHorizontal: SPACING.lg }}>
       {/* Header */}
       <View style={{ marginBottom: 16 }}>
-        <Text style={{ fontSize: 28, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5, marginBottom: 4 }}>
+        <Text style={{ ...FONT.title, color: colors.textPrimary, marginBottom: 4 }}>
           Build Workout
         </Text>
-        <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+        <Text style={{ ...FONT.body, color: colors.textSecondary }}>
           Search and pick your exercises. I'll handle the rest.
         </Text>
       </View>
@@ -320,10 +351,11 @@ export default function JustTalkScreen() {
       {/* Workout name (optional) */}
       <TextInput
         style={{
-          backgroundColor: colors.bgCard, borderRadius: RADIUS.md,
-          borderWidth: 1, borderColor: colors.border,
+          backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+          borderRadius: RADIUS.md,
+          borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
           paddingHorizontal: 14, paddingVertical: 10,
-          color: colors.textPrimary, fontSize: 15, marginBottom: 12,
+          color: colors.textPrimary, ...FONT.body, marginBottom: 12,
           minHeight: 44,
         }}
         placeholder="Workout name (optional)"
@@ -347,70 +379,81 @@ export default function JustTalkScreen() {
       {manualExercises.length > 0 && (
         <View style={{ marginTop: 16, flex: 1 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textDim, letterSpacing: 1 }}>
+            <Text style={{ ...FONT.label, color: colors.textDim }}>
               YOUR WORKOUT · {manualExercises.length} exercise{manualExercises.length !== 1 ? 's' : ''}
             </Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted }}>
+            <Text style={{ ...FONT.caption, color: colors.textMuted }}>
               ~{getEstimatedTime()} min
             </Text>
           </View>
 
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            {manualExercises.map((ex, index) => (
-              <View key={ex.id} style={{
-                flexDirection: 'row', alignItems: 'center',
-                backgroundColor: colors.bgCard, borderRadius: RADIUS.md,
-                padding: 12, marginBottom: 6,
-                borderWidth: 1, borderColor: colors.border,
-              }}>
-                {/* Order number */}
-                <View style={{
-                  width: 24, height: 24, borderRadius: 12,
-                  backgroundColor: coach.color + '15', justifyContent: 'center', alignItems: 'center', marginRight: 10,
-                }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: coach.color }}>{index + 1}</Text>
-                </View>
-
-                {/* Exercise info */}
-                <Text style={{ fontSize: 16, marginRight: 8 }}>{ex.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>{ex.name}</Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>{ex.muscle} · {ex.duration}s</Text>
-                </View>
-
-                {/* Reorder buttons */}
-                <View style={{ flexDirection: 'row', gap: 2, marginRight: 6 }}>
-                  <TouchableOpacity
-                    style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center', opacity: index === 0 ? 0.2 : 0.6 }}
-                    onPress={() => handleReorderExercise(index, 'up')}
-                    disabled={index === 0}
-                    accessibilityLabel={`Move ${ex.name} up`}
-                  >
-                    <Text style={{ fontSize: 14, color: colors.textMuted }}>▲</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center', opacity: index === manualExercises.length - 1 ? 0.2 : 0.6 }}
-                    onPress={() => handleReorderExercise(index, 'down')}
-                    disabled={index === manualExercises.length - 1}
-                    accessibilityLabel={`Move ${ex.name} down`}
-                  >
-                    <Text style={{ fontSize: 14, color: colors.textMuted }}>▼</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Remove */}
-                <TouchableOpacity
-                  style={{
-                    width: 28, height: 28, borderRadius: 14,
-                    backgroundColor: colors.red + '10', justifyContent: 'center', alignItems: 'center',
-                  }}
-                  onPress={() => handleRemoveExercise(ex.id)}
-                  accessibilityLabel={`Remove ${ex.name}`}
+            {manualExercises.map((ex, index) => {
+              const MuscleIcon = getMuscleIcon(ex.muscle);
+              return (
+                <FadeInView
+                  key={ex.id}
+                  delay={index * 50}
                 >
-                  <Text style={{ fontSize: 14, color: colors.red }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+                  <GlassCard
+                    accentColor={coach.color}
+                    style={{ padding: 12, marginBottom: 6, flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    {/* Order number */}
+                    <View style={{
+                      width: 24, height: 24, borderRadius: 12,
+                      backgroundColor: coach.color + '15', justifyContent: 'center', alignItems: 'center', marginRight: 10,
+                    }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: coach.color }}>{index + 1}</Text>
+                    </View>
+
+                    {/* Exercise info */}
+                    <View style={{
+                      width: 32, height: 32, borderRadius: 8,
+                      backgroundColor: coach.color + '12', justifyContent: 'center', alignItems: 'center', marginRight: 10,
+                    }}>
+                      <MuscleIcon size={16} color={coach.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ ...FONT.caption, fontWeight: '600', fontSize: 14, color: colors.textPrimary }}>{ex.name}</Text>
+                      <Text style={{ ...FONT.label, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 }}>{ex.muscle} · {ex.duration}s</Text>
+                    </View>
+
+                    {/* Reorder buttons */}
+                    <View style={{ flexDirection: 'row', gap: 2, marginRight: 6 }}>
+                      <TouchableOpacity
+                        style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center', opacity: index === 0 ? 0.2 : 0.6 }}
+                        onPress={() => handleReorderExercise(index, 'up')}
+                        disabled={index === 0}
+                        accessibilityLabel={`Move ${ex.name} up`}
+                      >
+                        <Text style={{ fontSize: 14, color: colors.textMuted }}>▲</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center', opacity: index === manualExercises.length - 1 ? 0.2 : 0.6 }}
+                        onPress={() => handleReorderExercise(index, 'down')}
+                        disabled={index === manualExercises.length - 1}
+                        accessibilityLabel={`Move ${ex.name} down`}
+                      >
+                        <Text style={{ fontSize: 14, color: colors.textMuted }}>▼</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Remove */}
+                    <TouchableOpacity
+                      style={{
+                        width: 28, height: 28, borderRadius: 14,
+                        backgroundColor: colors.red + '10', justifyContent: 'center', alignItems: 'center',
+                      }}
+                      onPress={() => handleRemoveExercise(ex.id)}
+                      accessibilityLabel={`Remove ${ex.name}`}
+                    >
+                      <Text style={{ fontSize: 14, color: colors.red }}>✕</Text>
+                    </TouchableOpacity>
+                  </GlassCard>
+                </FadeInView>
+              );
+            })}
             <View style={{ height: 120 }} />
           </ScrollView>
         </View>
@@ -427,109 +470,130 @@ export default function JustTalkScreen() {
             style={{
               backgroundColor: coach.color, borderRadius: RADIUS.md,
               paddingVertical: 16, alignItems: 'center', minHeight: 52,
+              flexDirection: 'row', justifyContent: 'center', gap: 8,
             }}
             onPress={handleBuildStart}
             accessibilityRole="button"
             accessibilityLabel={`Start custom workout with ${manualExercises.length} exercises`}
           >
-            <Text style={{ fontSize: 17, fontWeight: '700', color: getTextOnColor(coach.color) }}>
-              Start {manualExercises.length} Exercise{manualExercises.length !== 1 ? 's' : ''} →
+            <Text style={{ ...FONT.subhead, fontWeight: '700', color: getTextOnColor(coach.color) }}>
+              Start {manualExercises.length} Exercise{manualExercises.length !== 1 ? 's' : ''}
             </Text>
+            <ArrowRight size={18} color={getTextOnColor(coach.color)} />
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </FadeInView>
   );
 
   // ─── RENDER: TALK MODE INPUT ──────────────────────────────────
 
-  const renderTalkInput = () => (
-    <View style={{ flex: 1, paddingHorizontal: SPACING.lg }}>
-      <View style={{ marginBottom: 24 }}>
-        <Text style={{ fontSize: 28, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5, marginBottom: 8 }}>
-          Just Talk
-        </Text>
-        <Text style={{ fontSize: 15, color: colors.textSecondary, lineHeight: 22 }}>
-          Tell me what you've got — time, energy, focus — and I'll build your workout.
-        </Text>
-        {/* Profile context badge */}
-        {profile && (
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: coach.color + '10', borderWidth: 1, borderColor: coach.color + '20' }}>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: coach.color }}>{getLevelEmoji()} {profile.fitnessLevel}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.bgSubtle, borderWidth: 1, borderColor: colors.border }}>
-              <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>🏋️ {getEquipmentLabel()}</Text>
-            </View>
+  const renderTalkInput = () => {
+    const LevelIcon = getLevelIcon();
+    return (
+      <FadeInView from="none" style={{ flex: 1, paddingHorizontal: SPACING.lg }}>
+        <View style={{ marginBottom: 24 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <Text style={{ ...FONT.title, color: colors.textPrimary }}>
+              Just Talk
+            </Text>
+            <CoachIcon size={22} color={coach.color} />
           </View>
-        )}
-      </View>
+          <Text style={{ ...FONT.body, color: colors.textSecondary }}>
+            Tell me what you've got — time, energy, focus — and I'll build your workout.
+          </Text>
+          {/* Profile context badge */}
+          {profile && (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: coach.color + '10', borderWidth: 1, borderColor: coach.color + '20' }}>
+                <LevelIcon size={12} color={coach.color} />
+                <Text style={{ ...FONT.label, color: coach.color, textTransform: 'capitalize', letterSpacing: 0 }}>{profile.fitnessLevel}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: isDark ? colors.glassBg : colors.bgSubtle, borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border }}>
+                <Dumbbell size={12} color={colors.textMuted} />
+                <Text style={{ ...FONT.label, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 }}>{getEquipmentLabel()}</Text>
+              </View>
+            </View>
+          )}
+        </View>
 
-      {/* Input */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'flex-end',
-        backgroundColor: colors.bgCard, borderRadius: RADIUS.lg,
-        borderWidth: 1, borderColor: colors.border,
-        paddingLeft: 16, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
-      }}>
-        <TextInput
-          style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10 }}
-          placeholder={`"20 min core, I'm feeling tired" or "quick intense leg day"`}
-          placeholderTextColor={colors.textDim}
-          value={input} onChangeText={setInput} multiline maxLength={200}
-          returnKeyType="send" onSubmitEditing={() => handleGenerate()} blurOnSubmit
-          accessibilityLabel="Describe your ideal workout"
-        />
-        <TouchableOpacity
-          style={{
-            width: 44, height: 44, borderRadius: RADIUS.md,
-            backgroundColor: input.trim() && !generating ? coach.color : colors.bgSubtle,
-            justifyContent: 'center', alignItems: 'center',
-            opacity: generating ? 0.5 : 1,
-          }}
-          onPress={() => handleGenerate()} disabled={!input.trim() || generating}
-          accessibilityRole="button" accessibilityLabel="Generate workout"
-        >
-          <Text style={{ fontSize: 20, fontWeight: '700', color: input.trim() && !generating ? getTextOnColor(coach.color) : colors.textDim }}>→</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Divider */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-        <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-        <Text style={{ color: colors.textDim, fontSize: 13, marginHorizontal: 12 }}>or pick a quick start</Text>
-        <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-      </View>
-
-      {/* Presets */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {presets.map(preset => (
+        {/* Input */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'flex-end',
+          backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+          borderRadius: RADIUS.lg,
+          borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+          paddingLeft: 16, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
+        }}>
+          <TextInput
+            style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10 }}
+            placeholder={`"20 min core, I'm feeling tired" or "quick intense leg day"`}
+            placeholderTextColor={colors.textDim}
+            value={input} onChangeText={setInput} multiline maxLength={200}
+            returnKeyType="send" onSubmitEditing={() => handleGenerate()} blurOnSubmit
+            accessibilityLabel="Describe your ideal workout"
+          />
           <TouchableOpacity
-            key={preset.label}
             style={{
-              backgroundColor: colors.bgCard, borderRadius: 20,
-              paddingHorizontal: 16, paddingVertical: 10,
-              borderWidth: 1, borderColor: colors.border,
+              width: 44, height: 44, borderRadius: RADIUS.md,
+              backgroundColor: input.trim() && !generating ? coach.color : (isDark ? colors.glassBg : colors.bgSubtle),
+              justifyContent: 'center', alignItems: 'center',
               opacity: generating ? 0.5 : 1,
             }}
-            onPress={() => { setInput(preset.value); handleGenerate(preset.value); }}
-            activeOpacity={0.7} disabled={generating}
-            accessibilityRole="button" accessibilityLabel={preset.label}
+            onPress={() => handleGenerate()} disabled={!input.trim() || generating}
+            accessibilityRole="button" accessibilityLabel="Generate workout"
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '500' }}>{preset.label}</Text>
+            <Send size={18} color={input.trim() && !generating ? getTextOnColor(coach.color) : colors.textDim} />
           </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
+        </View>
+
+        {/* Divider */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+          <Text style={{ color: colors.textDim, ...FONT.caption, marginHorizontal: 12 }}>or pick a quick start</Text>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </View>
+
+        {/* Presets */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {presets.map((preset, idx) => {
+            const PresetIcon = preset.Icon;
+            return (
+              <FadeInView key={preset.label} delay={idx * 40}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+                    borderRadius: 20,
+                    paddingHorizontal: 14, paddingVertical: 10,
+                    borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+                    opacity: generating ? 0.5 : 1,
+                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                  }}
+                  onPress={() => { setInput(preset.value); handleGenerate(preset.value); }}
+                  activeOpacity={0.7} disabled={generating}
+                  accessibilityRole="button" accessibilityLabel={preset.label}
+                >
+                  <PresetIcon size={14} color={coach.color} />
+                  <Text style={{ color: colors.textPrimary, ...FONT.caption, fontWeight: '500', fontSize: 14 }}>{preset.label}</Text>
+                </TouchableOpacity>
+              </FadeInView>
+            );
+          })}
+        </View>
+      </FadeInView>
+    );
+  };
 
   // ─── RENDER: LOADING ──────────────────────────────────────────
 
   const renderLoadingPhase = () => (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 100 }}>
+    <FadeInView
+      from="none"
+      style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 100 }}
+    >
       <ActivityIndicator size="large" color={coach.color} />
-      <Text style={{ color: colors.textPrimary, fontSize: 20, fontWeight: '700', marginTop: 20 }}>Building your workout...</Text>
-      <Text style={{ color: colors.textSecondary, fontSize: 14, marginTop: 6 }}>
+      <Text style={{ color: colors.textPrimary, ...FONT.heading, marginTop: 20 }}>Building your workout...</Text>
+      <Text style={{ color: colors.textSecondary, ...FONT.body, marginTop: 6, textAlign: 'center', paddingHorizontal: SPACING.lg }}>
         {{
           drill: "Picking exercises that'll make you earn it.",
           hype: "Making something AMAZING for you!",
@@ -541,9 +605,9 @@ export default function JustTalkScreen() {
         style={{ marginTop: 24, paddingHorizontal: 20, paddingVertical: 10 }}
         activeOpacity={0.7}
       >
-        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textMuted }}>Cancel</Text>
+        <Text style={{ ...FONT.caption, fontWeight: '600', color: colors.textMuted }}>Cancel</Text>
       </TouchableOpacity>
-    </View>
+    </FadeInView>
   );
 
   // ─── RENDER: PREVIEW ─────────────────────────────────────────
@@ -551,40 +615,46 @@ export default function JustTalkScreen() {
   const renderPreviewPhase = () => {
     if (!workout || !parsed) return null;
 
-    const energyEmoji = { low: '🧘', medium: '💪', high: '🔥' };
-    const energyLabel = { low: 'Easy', medium: 'Moderate', high: 'Intense' };
-    const phaseLabels = { warmup: '🔄 WARM-UP', main: '🏋️ MAIN', cooldown: '🧘 COOL-DOWN' };
+    const EnergyIcon = ENERGY_ICONS[parsed.energy] || ENERGY_ICONS.medium;
 
     return (
-      <Animated.View style={{ flex: 1, paddingHorizontal: SPACING.lg, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+      <FadeInView
+        from="up" distance={50}
+        style={{ flex: 1, paddingHorizontal: SPACING.lg }}
+      >
         {/* Summary Card */}
-        <View style={{
-          backgroundColor: colors.bgCard, borderRadius: RADIUS.lg, padding: 20,
-          marginBottom: 20, borderWidth: 1, borderColor: coach.color + '20',
-        }}>
-          <Text style={{ color: colors.textMuted, fontSize: 13, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Here's what I built:</Text>
+        <GlassCard accentColor={coach.color} glow style={{ padding: 20, marginBottom: 20 }}>
+          <Text style={{ color: colors.textMuted, ...FONT.label, marginBottom: 6 }}>Here's what I built:</Text>
           <Text style={{ color: colors.textPrimary, fontSize: 24, fontWeight: '800', marginBottom: 14 }}>{workout.name}</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {[
-              `⏱ ${parsed.duration} min`,
-              `${energyEmoji[parsed.energy]} ${energyLabel[parsed.energy]}`,
-              `${workout.exercises?.length || 0} exercises`,
-              `~${workout.estimatedCalories} cal`,
-            ].map(tag => (
-              <View key={tag} style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: coach.color + '15' }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: coach.color }}>{tag}</Text>
-              </View>
-            ))}
+            {/* Duration tag */}
+            <View style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: coach.color + '15', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Clock size={12} color={coach.color} />
+              <Text style={{ ...FONT.caption, fontWeight: '600', color: coach.color }}>{parsed.duration} min</Text>
+            </View>
+            {/* Energy tag */}
+            <View style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: coach.color + '15', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <EnergyIcon size={12} color={coach.color} />
+              <Text style={{ ...FONT.caption, fontWeight: '600', color: coach.color }}>{ENERGY_LABELS[parsed.energy]}</Text>
+            </View>
+            {/* Exercises count tag */}
+            <View style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: coach.color + '15' }}>
+              <Text style={{ ...FONT.caption, fontWeight: '600', color: coach.color }}>{workout.exercises?.length || 0} exercises</Text>
+            </View>
+            {/* Calories tag */}
+            <View style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: coach.color + '15' }}>
+              <Text style={{ ...FONT.caption, fontWeight: '600', color: coach.color }}>~{workout.estimatedCalories} cal</Text>
+            </View>
           </View>
           {workout.structure && (
-            <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 10 }}>
-              {workout.structure.warmup > 0 ? `${workout.structure.warmup} warmup → ` : ''}
+            <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 10, textTransform: 'none', letterSpacing: 0 }}>
+              {workout.structure.warmup > 0 ? `${workout.structure.warmup} warmup \u2192 ` : ''}
               {workout.structure.main} main
-              {workout.structure.cooldown > 0 ? ` → ${workout.structure.cooldown} cooldown` : ''}
+              {workout.structure.cooldown > 0 ? ` \u2192 ${workout.structure.cooldown} cooldown` : ''}
               {' · '}Scaled for {workout.fitnessLevel}
             </Text>
           )}
-        </View>
+        </GlassCard>
 
         {/* Exercise List */}
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -593,44 +663,57 @@ export default function JustTalkScreen() {
             return workout.exercises?.map((ex, index) => {
               const showPhaseHeader = ex.phase && ex.phase !== currentPhase;
               if (showPhaseHeader) currentPhase = ex.phase;
+              const phaseConfig = PHASE_CONFIG[ex.phase];
+              const PhaseIcon = phaseConfig?.Icon;
+              const MuscleIcon = getMuscleIcon(ex.muscle);
 
               return (
-                <View key={ex.id || index}>
+                <FadeInView
+                  key={ex.id || index}
+                  delay={index * 60}
+                >
                   {showPhaseHeader && (
-                    <Text style={{
-                      color: colors.textDim, fontSize: 11, letterSpacing: 1.5, marginBottom: 8, marginTop: index > 0 ? 16 : 0,
-                    }}>{phaseLabels[ex.phase] || ex.phase?.toUpperCase()}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, marginTop: index > 0 ? 16 : 0 }}>
+                      {PhaseIcon && <PhaseIcon size={11} color={colors.textDim} />}
+                      <Text style={{
+                        color: colors.textDim, ...FONT.label,
+                      }}>{phaseConfig?.label || ex.phase?.toUpperCase()}</Text>
+                    </View>
                   )}
-                  <View style={{
-                    flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: colors.bgCard, borderRadius: RADIUS.md,
-                    padding: 14, marginBottom: 8,
-                    borderWidth: 1, borderColor: colors.border,
-                    opacity: ex.phase === 'warmup' || ex.phase === 'cooldown' ? 0.8 : 1,
-                  }}
-                    accessible accessibilityLabel={`${ex.name}, ${ex.muscle}, ${ex.duration} seconds work${ex.rest > 0 ? `, ${ex.rest} seconds rest` : ''}`}
+                  <GlassCard
+                    accentColor={ex.phase === 'main' ? coach.color : undefined}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      padding: 14, marginBottom: 8,
+                      opacity: ex.phase === 'warmup' || ex.phase === 'cooldown' ? 0.8 : 1,
+                    }}
+                    noPadding={false}
                   >
-                    <View style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      backgroundColor: ex.phase === 'main' ? coach.color + '18' : colors.bgSubtle,
-                      justifyContent: 'center', alignItems: 'center', marginRight: 14,
-                    }}>
-                      <Text style={{ fontSize: 16 }}>{ex.icon || '💪'}</Text>
+                    <View
+                      style={{
+                        width: 36, height: 36, borderRadius: 10,
+                        backgroundColor: ex.phase === 'main' ? coach.color + '18' : (isDark ? colors.glassBg : colors.bgSubtle),
+                        justifyContent: 'center', alignItems: 'center', marginRight: 14,
+                      }}
+                      accessible
+                      accessibilityLabel={`${ex.name}, ${ex.muscle}, ${ex.duration} seconds work${ex.rest > 0 ? `, ${ex.rest} seconds rest` : ''}`}
+                    >
+                      <MuscleIcon size={16} color={ex.phase === 'main' ? coach.color : colors.textMuted} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.textPrimary, fontSize: 15, fontWeight: '600' }}>{ex.name}</Text>
-                      <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+                      <Text style={{ color: colors.textPrimary, ...FONT.body, fontWeight: '600' }}>{ex.name}</Text>
+                      <Text style={{ color: colors.textMuted, ...FONT.caption, marginTop: 2 }}>
                         {ex.muscle}{ex.equipment && ex.equipment !== 'none' ? ` · ${ex.equipment}` : ''}{' · '}
                         {ex.duration}s{ex.rest > 0 ? ` · ${ex.rest}s rest` : ''}
                       </Text>
                     </View>
                     {ex.phase === 'main' && (
-                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.bgSubtle }}>
+                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: isDark ? colors.glassBg : colors.bgSubtle }}>
                         <Text style={{ fontSize: 10, fontWeight: '600', color: colors.textMuted }}>{ex.intensity}/10</Text>
                       </View>
                     )}
-                  </View>
-                </View>
+                  </GlassCard>
+                </FadeInView>
               );
             });
           })()}
@@ -645,25 +728,42 @@ export default function JustTalkScreen() {
           backgroundColor: colors.bg, borderTopWidth: 1, borderTopColor: colors.border, gap: 10,
         }}>
           <TouchableOpacity
-            style={{ backgroundColor: colors.bgCard, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: colors.border, minHeight: 48 }}
+            style={{
+              backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+              borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14,
+              borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+              minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6,
+            }}
             onPress={handleRegenerate} accessibilityRole="button" accessibilityLabel="Shuffle exercises"
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>🔄 Shuffle</Text>
+            <RefreshCw size={14} color={colors.textPrimary} />
+            <Text style={{ color: colors.textPrimary, ...FONT.caption, fontWeight: '600', fontSize: 14 }}>Shuffle</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={{ backgroundColor: colors.bgCard, borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: colors.border, minHeight: 48 }}
+            style={{
+              backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+              borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 14,
+              borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+              minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 6,
+            }}
             onPress={handleBack} accessibilityRole="button" accessibilityLabel="Edit request"
           >
-            <Text style={{ color: colors.textPrimary, fontSize: 14, fontWeight: '600' }}>✏️ Edit</Text>
+            <Pencil size={14} color={colors.textPrimary} />
+            <Text style={{ color: colors.textPrimary, ...FONT.caption, fontWeight: '600', fontSize: 14 }}>Edit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: coach.color, borderRadius: RADIUS.md, paddingVertical: 14, alignItems: 'center', minHeight: 48 }}
+            style={{
+              flex: 1, backgroundColor: coach.color, borderRadius: RADIUS.md,
+              paddingVertical: 14, alignItems: 'center', minHeight: 48,
+              flexDirection: 'row', justifyContent: 'center', gap: 8,
+            }}
             onPress={handleStart} accessibilityRole="button" accessibilityLabel="Start workout"
           >
-            <Text style={{ fontSize: 16, fontWeight: '700', color: getTextOnColor(coach.color) }}>Start Workout →</Text>
+            <Text style={{ ...FONT.subhead, fontWeight: '700', color: getTextOnColor(coach.color) }}>Start Workout</Text>
+            <ArrowRight size={18} color={getTextOnColor(coach.color)} />
           </TouchableOpacity>
         </View>
-      </Animated.View>
+      </FadeInView>
     );
   };
 
@@ -679,7 +779,7 @@ export default function JustTalkScreen() {
           accessibilityRole="button" accessibilityLabel={phase === 'preview' ? 'New request' : 'Go back'}
         >
           <Text style={{ color: colors.textSecondary, fontSize: 16 }}>
-            {phase === 'preview' ? '← New Request' : '← Back'}
+            {phase === 'preview' ? '\u2190 New Request' : '\u2190 Back'}
           </Text>
         </TouchableOpacity>
 

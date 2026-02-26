@@ -2,7 +2,7 @@
 // EXERCISE SEARCH — Fuzzy autocomplete over exercise database
 //
 // Features:
-// - Fuzzy matching (typing "ben" → "Bench Press", "Bench Fly")
+// - Fuzzy matching (typing "ben" -> "Bench Press", "Bench Fly")
 // - Grouped by muscle when browsing
 // - Smart suggestions based on selected exercises
 // - Equipment filtering based on user profile
@@ -22,19 +22,21 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   Animated, Keyboard,
 } from 'react-native';
+import { Search, X, Plus, Sparkles } from 'lucide-react-native';
 
 import { EXERCISES } from '../constants/exercises';
-import { RADIUS } from '../constants/theme';
+import { getMuscleIcon } from '../constants/icons';
+import { RADIUS, FONT, GLOW } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import * as haptics from '../services/haptics';
 
-// ─── FUZZY MATCH ────────────────────────────────────────────────
+// ---- FUZZY MATCH ----
 
 function fuzzyMatch(query, text) {
   const q = query.toLowerCase().trim();
   const t = text.toLowerCase();
 
-  // Exact substring match — highest priority
+  // Exact substring match -- highest priority
   if (t.includes(q)) return { match: true, score: 100 - t.indexOf(q) };
 
   // Word-start matching (each query word matches start of a word in text)
@@ -59,7 +61,7 @@ function fuzzyMatch(query, text) {
   return { match: false, score: 0 };
 }
 
-// ─── EQUIPMENT MAPPING ──────────────────────────────────────────
+// ---- EQUIPMENT MAPPING ----
 
 const PROFILE_TO_EXERCISE_EQUIPMENT = {
   bodyweight: ['none', 'wall', 'chair'],
@@ -77,7 +79,7 @@ function getAvailableEquipment(profileEquipment) {
   return [...set];
 }
 
-// ─── MUSCLE GROUP SUGGESTIONS ───────────────────────────────────
+// ---- MUSCLE GROUP SUGGESTIONS ----
 
 const RELATED_MUSCLES = {
   Chest: ['Shoulders', 'Arms'],
@@ -91,7 +93,7 @@ const RELATED_MUSCLES = {
   'Full Body': ['Cardio', 'Core'],
 };
 
-// ─── COMPONENT ──────────────────────────────────────────────────
+// ---- COMPONENT ----
 
 export default function ExerciseSearch({
   onSelect,
@@ -101,7 +103,7 @@ export default function ExerciseSearch({
   maxHeight = 320,
   placeholder = 'Search exercises... (e.g. "bench", "curl")',
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [query, setQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
   const inputRef = useRef(null);
@@ -109,7 +111,7 @@ export default function ExerciseSearch({
 
   const availableEquipment = useMemo(() => getAvailableEquipment(equipment), [equipment]);
 
-  // ─── FILTERED + SORTED EXERCISES ──────────────────────────────
+  // ---- FILTERED + SORTED EXERCISES ----
 
   const filteredExercises = useMemo(() => {
     // Filter by equipment
@@ -119,7 +121,7 @@ export default function ExerciseSearch({
     );
 
     if (!query.trim()) {
-      // No query — group by muscle, show all available
+      // No query -- group by muscle, show all available
       return equipFiltered
         .filter(e => !selectedIds.includes(e.id))
         .sort((a, b) => a.muscle.localeCompare(b.muscle) || a.name.localeCompare(b.name));
@@ -140,7 +142,7 @@ export default function ExerciseSearch({
       .sort((a, b) => b._score - a._score);
   }, [query, availableEquipment, selectedIds]);
 
-  // ─── SMART SUGGESTIONS ────────────────────────────────────────
+  // ---- SMART SUGGESTIONS ----
 
   const suggestions = useMemo(() => {
     if (selectedIds.length === 0 || query.trim()) return [];
@@ -180,7 +182,7 @@ export default function ExerciseSearch({
     return suggested.slice(0, 4);
   }, [selectedIds, query, availableEquipment]);
 
-  // ─── ANIMATIONS ───────────────────────────────────────────────
+  // ---- ANIMATIONS ----
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -190,7 +192,7 @@ export default function ExerciseSearch({
     }).start();
   }, [showResults]);
 
-  // ─── HANDLERS ─────────────────────────────────────────────────
+  // ---- HANDLERS ----
 
   const handleSelect = useCallback((exercise) => {
     haptics.tap();
@@ -208,78 +210,96 @@ export default function ExerciseSearch({
     setTimeout(() => setShowResults(false), 200);
   }, []);
 
-  // ─── RENDER GROUPED RESULTS ───────────────────────────────────
+  // ---- RENDER GROUPED RESULTS ----
 
   const renderGrouped = () => {
     if (query.trim()) {
-      // Search results — flat list sorted by relevance
+      // Search results -- flat list sorted by relevance
       return filteredExercises.map(ex => renderExerciseRow(ex));
     }
 
-    // No query — group by muscle
+    // No query -- group by muscle
     const groups = {};
     filteredExercises.forEach(ex => {
       if (!groups[ex.muscle]) groups[ex.muscle] = [];
       groups[ex.muscle].push(ex);
     });
 
-    return Object.entries(groups).map(([muscle, exercises]) => (
-      <View key={muscle}>
-        <Text style={{
-          fontSize: 11, fontWeight: '700', color: colors.textDim,
-          letterSpacing: 1.5, marginTop: 12, marginBottom: 6, paddingHorizontal: 4,
-        }}>
-          {muscle.toUpperCase()}
-        </Text>
-        {exercises.map(ex => renderExerciseRow(ex))}
-      </View>
-    ));
+    return Object.entries(groups).map(([muscle, exercises]) => {
+      const MuscleIcon = getMuscleIcon(muscle);
+      return (
+        <View key={muscle}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 6,
+            marginTop: 12, marginBottom: 6, paddingHorizontal: 4,
+          }}>
+            <MuscleIcon size={12} color={colors.textDim} strokeWidth={2} />
+            <Text style={{
+              ...FONT.label, fontSize: 11, color: colors.textDim,
+            }}>
+              {muscle.toUpperCase()}
+            </Text>
+          </View>
+          {exercises.map(ex => renderExerciseRow(ex))}
+        </View>
+      );
+    });
   };
 
-  const renderExerciseRow = (ex) => (
-    <TouchableOpacity
-      key={ex.id}
-      style={{
-        flexDirection: 'row', alignItems: 'center',
-        paddingVertical: 10, paddingHorizontal: 12,
-        borderRadius: RADIUS.sm, marginBottom: 2,
-      }}
-      onPress={() => handleSelect(ex)}
-      activeOpacity={0.6}
-      accessibilityRole="button"
-      accessibilityLabel={`Add ${ex.name}, ${ex.muscle}`}
-    >
-      <Text style={{ fontSize: 18, marginRight: 12, width: 28, textAlign: 'center' }}>{ex.icon}</Text>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textPrimary }}>{ex.name}</Text>
-        <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>
-          {ex.muscle}
-          {ex.equipment !== 'none' ? ` · ${ex.equipment}` : ''}
-          {' · '}Intensity {ex.intensity}/10
-        </Text>
-      </View>
-      <View style={{
-        width: 28, height: 28, borderRadius: 14,
-        backgroundColor: coachColor + '15', borderWidth: 1.5, borderColor: coachColor + '30',
-        justifyContent: 'center', alignItems: 'center',
-      }}>
-        <Text style={{ fontSize: 16, color: coachColor, fontWeight: '700', marginTop: -1 }}>+</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderExerciseRow = (ex) => {
+    const ExIcon = getMuscleIcon(ex.muscle);
+    return (
+      <TouchableOpacity
+        key={ex.id}
+        style={{
+          flexDirection: 'row', alignItems: 'center',
+          paddingVertical: 10, paddingHorizontal: 12,
+          borderRadius: RADIUS.sm, marginBottom: 2,
+        }}
+        onPress={() => handleSelect(ex)}
+        activeOpacity={0.6}
+        accessibilityRole="button"
+        accessibilityLabel={`Add ${ex.name}, ${ex.muscle}`}
+      >
+        <View style={{
+          width: 28, height: 28, borderRadius: 8,
+          backgroundColor: coachColor + '10',
+          alignItems: 'center', justifyContent: 'center',
+          marginRight: 12,
+        }}>
+          <ExIcon size={15} color={coachColor} strokeWidth={2} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ ...FONT.subhead, fontSize: 15, color: colors.textPrimary }}>{ex.name}</Text>
+          <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 1 }}>
+            {ex.muscle}
+            {ex.equipment !== 'none' ? ` \u00B7 ${ex.equipment}` : ''}
+            {' \u00B7 '}Intensity {ex.intensity}/10
+          </Text>
+        </View>
+        <View style={{
+          width: 28, height: 28, borderRadius: 14,
+          backgroundColor: coachColor + '15', borderWidth: 1.5, borderColor: coachColor + '30',
+          justifyContent: 'center', alignItems: 'center',
+        }}>
+          <Plus size={15} color={coachColor} strokeWidth={2.5} />
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-  // ─── MAIN RENDER ──────────────────────────────────────────────
+  // ---- MAIN RENDER ----
 
   return (
     <View>
       {/* Search Input */}
       <View style={{
         flexDirection: 'row', alignItems: 'center',
-        backgroundColor: colors.bgCard, borderRadius: RADIUS.md,
-        borderWidth: 1, borderColor: showResults ? coachColor + '40' : colors.border,
+        backgroundColor: colors.glassBg, borderRadius: RADIUS.md,
+        borderWidth: 1, borderColor: showResults ? coachColor + '40' : colors.glassBorder,
         paddingHorizontal: 14, paddingVertical: 2,
       }}>
-        <Text style={{ fontSize: 16, marginRight: 8, opacity: 0.5 }}>🔍</Text>
+        <Search size={16} color={colors.textDim} strokeWidth={2} style={{ marginRight: 8 }} />
         <TextInput
           ref={inputRef}
           style={{
@@ -302,7 +322,7 @@ export default function ExerciseSearch({
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             accessibilityLabel="Clear search"
           >
-            <Text style={{ fontSize: 16, color: colors.textMuted }}>✕</Text>
+            <X size={16} color={colors.textMuted} strokeWidth={2} />
           </TouchableOpacity>
         )}
       </View>
@@ -310,29 +330,38 @@ export default function ExerciseSearch({
       {/* Smart Suggestions */}
       {suggestions.length > 0 && !query.trim() && showResults && (
         <View style={{ marginTop: 12 }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: coachColor, letterSpacing: 1, marginBottom: 8, paddingHorizontal: 4 }}>
-            ✨ SUGGESTED FOR YOUR WORKOUT
-          </Text>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5,
+            marginBottom: 8, paddingHorizontal: 4,
+          }}>
+            <Sparkles size={12} color={coachColor} strokeWidth={2} />
+            <Text style={{ ...FONT.label, fontSize: 11, color: coachColor }}>
+              SUGGESTED FOR YOUR WORKOUT
+            </Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
-            {suggestions.map(ex => (
-              <TouchableOpacity
-                key={ex.id}
-                style={{
-                  backgroundColor: coachColor + '10', borderRadius: RADIUS.md,
-                  borderWidth: 1, borderColor: coachColor + '20',
-                  paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 4,
-                  flexDirection: 'row', alignItems: 'center', gap: 8,
-                }}
-                onPress={() => handleSelect(ex)}
-                activeOpacity={0.6}
-              >
-                <Text style={{ fontSize: 16 }}>{ex.icon}</Text>
-                <View>
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textPrimary }}>{ex.name}</Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted }}>{ex.muscle}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {suggestions.map(ex => {
+              const SugIcon = getMuscleIcon(ex.muscle);
+              return (
+                <TouchableOpacity
+                  key={ex.id}
+                  style={{
+                    backgroundColor: coachColor + '10', borderRadius: RADIUS.md,
+                    borderWidth: 1, borderColor: coachColor + '20',
+                    paddingHorizontal: 14, paddingVertical: 10, marginHorizontal: 4,
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                  }}
+                  onPress={() => handleSelect(ex)}
+                  activeOpacity={0.6}
+                >
+                  <SugIcon size={16} color={coachColor} strokeWidth={2} />
+                  <View>
+                    <Text style={{ ...FONT.caption, fontWeight: '600', color: colors.textPrimary }}>{ex.name}</Text>
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>{ex.muscle}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
       )}
@@ -342,8 +371,8 @@ export default function ExerciseSearch({
         <Animated.View style={{
           opacity: fadeAnim,
           maxHeight: maxHeight,
-          backgroundColor: colors.bgCard, borderRadius: RADIUS.md,
-          borderWidth: 1, borderColor: colors.border,
+          backgroundColor: colors.glassBg, borderRadius: RADIUS.md,
+          borderWidth: 1, borderColor: colors.glassBorder,
           marginTop: 8, overflow: 'hidden',
         }}>
           <ScrollView
@@ -354,7 +383,7 @@ export default function ExerciseSearch({
             {filteredExercises.length > 0 ? (
               <>
                 {query.trim() && (
-                  <Text style={{ fontSize: 11, color: colors.textDim, paddingHorizontal: 4, marginBottom: 4 }}>
+                  <Text style={{ ...FONT.label, fontSize: 11, color: colors.textDim, paddingHorizontal: 4, marginBottom: 4 }}>
                     {filteredExercises.length} result{filteredExercises.length !== 1 ? 's' : ''}
                   </Text>
                 )}
@@ -362,7 +391,7 @@ export default function ExerciseSearch({
               </>
             ) : (
               <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ fontSize: 14, color: colors.textMuted }}>
+                <Text style={{ ...FONT.body, fontSize: 14, color: colors.textMuted }}>
                   {query.trim()
                     ? `No exercises matching "${query}"`
                     : 'All exercises are in your workout!'}

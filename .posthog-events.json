@@ -1,0 +1,126 @@
+{
+  "project": "SayFit",
+  "description": "PostHog analytics event plan for the SayFit React Native / Expo app",
+  "events": [
+    {
+      "name": "onboarding_started",
+      "description": "User opens the onboarding flow for the first time",
+      "location": "OnboardingScreen.js",
+      "trigger": "Component mounts (step === 0)",
+      "properties": {}
+    },
+    {
+      "name": "onboarding_step_completed",
+      "description": "User advances past an onboarding step",
+      "location": "OnboardingScreen.js",
+      "trigger": "handleNext() called",
+      "properties": {
+        "step": "number (0-4)",
+        "step_name": "string (name | fitness_level | equipment | workout_days | training_mode)"
+      }
+    },
+    {
+      "name": "onboarding_completed",
+      "description": "User finishes onboarding and profile is saved",
+      "location": "OnboardingScreen.js",
+      "trigger": "handleFinish() succeeds",
+      "properties": {
+        "fitness_level": "string (beginner | intermediate | advanced)",
+        "equipment": "string[] (e.g. ['bodyweight', 'dumbbells'])",
+        "workout_days_count": "number",
+        "preferred_mode": "string (coach | logger | both)",
+        "coach_id": "string (drill | hype | zen)"
+      }
+    },
+    {
+      "name": "workout_generated",
+      "description": "A workout plan is generated via natural-language input or a preset",
+      "location": "JustTalkScreen.js",
+      "trigger": "handleGenerate() resolves with exercises",
+      "properties": {
+        "input_text": "string (user's raw request)",
+        "duration_minutes": "number",
+        "exercise_count": "number",
+        "energy_level": "string (low | medium | high)",
+        "estimated_calories": "number",
+        "source": "string (text | preset)",
+        "coach_id": "string"
+      }
+    },
+    {
+      "name": "workout_started",
+      "description": "User taps 'Start Workout' and the guided session begins",
+      "location": "JustTalkScreen.js",
+      "trigger": "handleStart() or handleBuildStart() called",
+      "properties": {
+        "workout_name": "string",
+        "exercise_count": "number",
+        "coach_id": "string",
+        "mode": "string (talk | build)"
+      }
+    },
+    {
+      "name": "workout_command_sent",
+      "description": "User taps a voice command (harder, easier, skip, pause, etc.)",
+      "location": "WorkoutScreen.js",
+      "trigger": "handleCommand() called",
+      "properties": {
+        "command": "string (harder | easier | swap | skip | tired | pause)",
+        "coach_id": "string",
+        "exercises_completed": "number",
+        "total_exercises": "number"
+      }
+    },
+    {
+      "name": "workout_completed",
+      "description": "Guided workout finishes (all exercises done)",
+      "location": "CompleteScreen.js",
+      "trigger": "Component mounts with guided workout data",
+      "properties": {
+        "workout_name": "string",
+        "calories": "number",
+        "exercises_completed": "number",
+        "adaptations": "number",
+        "duration_seconds": "number",
+        "coach_id": "string",
+        "new_achievements_count": "number",
+        "streak": "number"
+      }
+    },
+    {
+      "name": "workout_logged",
+      "description": "User manually logs a strength workout via LogWorkoutScreen",
+      "location": "LogWorkoutScreen.js + CompleteScreen.js",
+      "trigger": "handleSave() succeeds in LogWorkoutScreen",
+      "properties": {
+        "exercise_count": "number",
+        "total_sets": "number",
+        "total_volume": "number",
+        "new_prs_count": "number",
+        "units": "string (lbs | kg)",
+        "mode": "string (text | form)"
+      }
+    },
+    {
+      "name": "achievement_unlocked",
+      "description": "One or more achievements are earned after a workout",
+      "location": "CompleteScreen.js",
+      "trigger": "checkAchievements() returns non-empty array",
+      "properties": {
+        "achievement_id": "string",
+        "achievement_name": "string",
+        "tier": "string (bronze | silver | gold | platinum)"
+      }
+    },
+    {
+      "name": "app_error",
+      "description": "An uncaught React render error is caught by the ErrorBoundary",
+      "location": "ErrorBoundary.js",
+      "trigger": "componentDidCatch()",
+      "properties": {
+        "error_message": "string",
+        "component_stack": "string"
+      }
+    }
+  ]
+}

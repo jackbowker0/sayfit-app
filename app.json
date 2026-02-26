@@ -4,6 +4,7 @@
     "slug": "sayfit-fresh",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "sayfit",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sayfit.app"
+      "bundleIdentifier": "com.sayfit.app",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +24,19 @@
         "backgroundColor": "#0A0A0F"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.sayfit.app"
+      "package": "com.sayfit.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "sayfit"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

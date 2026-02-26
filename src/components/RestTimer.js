@@ -7,8 +7,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import {
+  X, Play, Pause, SkipForward, Plus, Check, ArrowRight,
+} from 'lucide-react-native';
 
-import { COLORS, RADIUS } from '../constants/theme';
+import { COLORS, RADIUS, FONT, GLOW } from '../constants/theme';
 import * as haptics from '../services/haptics';
 
 const DEFAULT_REST = 90;
@@ -58,7 +61,7 @@ export default function RestTimer({
           clearInterval(intervalRef.current);
           if (!hasCompleted.current) {
             hasCompleted.current = true;
-            // Warning haptic — "time to get back to work"
+            // Warning haptic -- "time to get back to work"
             haptics.warning();
           }
           if (onComplete) onComplete();
@@ -110,7 +113,7 @@ export default function RestTimer({
           accessibilityRole="button"
           accessibilityLabel="Close rest timer"
         >
-          <Text style={styles.closeBtnText}>✕</Text>
+          <X size={22} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
         </TouchableOpacity>
 
         {/* Title */}
@@ -131,7 +134,7 @@ export default function RestTimer({
         >
           <View style={[styles.ringBg, {
             width: ringSize, height: ringSize, borderRadius: ringSize / 2,
-            borderWidth: ringStroke, borderColor: '#ffffff08',
+            borderWidth: ringStroke, borderColor: 'rgba(255,255,255,0.03)',
           }]} />
           <View style={[styles.ringProgress, {
             width: ringSize, height: ringSize, borderRadius: ringSize / 2,
@@ -143,11 +146,13 @@ export default function RestTimer({
             borderLeftColor: progress >= 1 ? (isDone ? '#2ECC40' : coachColor) : 'transparent',
           }]} />
           <View style={styles.ringCenter}>
-            <Text style={[styles.timeText, isDone && { color: '#2ECC40' }]}>
-              {isDone ? '✓' : timeString}
-            </Text>
-            {!isDone && (
-              <Text style={styles.timeLabel}>remaining</Text>
+            {isDone ? (
+              <Check size={48} color="#2ECC40" strokeWidth={2.5} />
+            ) : (
+              <>
+                <Text style={styles.timeText}>{timeString}</Text>
+                <Text style={styles.timeLabel}>remaining</Text>
+              </>
             )}
           </View>
         </View>
@@ -162,18 +167,34 @@ export default function RestTimer({
                 accessibilityRole="button"
                 accessibilityLabel="Skip rest timer"
               >
-                <Text style={styles.controlText}>Skip →</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <SkipForward size={14} color={COLORS.textSecondary} strokeWidth={2} />
+                  <Text style={styles.controlText}>Skip</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.controlBtnAccent, { backgroundColor: coachColor + '20', borderColor: coachColor + '40' }]}
+                style={[styles.controlBtnAccent, {
+                  backgroundColor: coachColor + '20', borderColor: coachColor + '40',
+                  shadowColor: coachColor,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: GLOW.sm,
+                }]}
                 onPress={handlePause}
                 accessibilityRole="button"
                 accessibilityLabel={isPaused ? 'Resume timer' : 'Pause timer'}
               >
-                <Text style={[styles.controlTextAccent, { color: coachColor }]}>
-                  {isPaused ? '▶ Resume' : '⏸ Pause'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  {isPaused ? (
+                    <Play size={14} color={coachColor} strokeWidth={2.5} />
+                  ) : (
+                    <Pause size={14} color={coachColor} strokeWidth={2.5} />
+                  )}
+                  <Text style={[styles.controlTextAccent, { color: coachColor }]}>
+                    {isPaused ? 'Resume' : 'Pause'}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -182,17 +203,29 @@ export default function RestTimer({
                 accessibilityRole="button"
                 accessibilityLabel="Add 30 seconds"
               >
-                <Text style={styles.controlText}>+30s</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Plus size={13} color={COLORS.textSecondary} strokeWidth={2.5} />
+                  <Text style={styles.controlText}>30s</Text>
+                </View>
               </TouchableOpacity>
             </>
           ) : (
             <TouchableOpacity
-              style={[styles.doneBtn, { backgroundColor: '#2ECC40' }]}
+              style={[styles.doneBtn, {
+                backgroundColor: '#2ECC40',
+                shadowColor: '#2ECC40',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.3,
+                shadowRadius: GLOW.md,
+              }]}
               onPress={handleSkip}
               accessibilityRole="button"
               accessibilityLabel="Continue to next set"
             >
-              <Text style={styles.doneBtnText}>Next Set →</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.doneBtnText}>Next Set</Text>
+                <ArrowRight size={16} color="#fff" strokeWidth={2.5} />
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -229,21 +262,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeBtnText: {
-    fontSize: 22,
-    color: '#ffffff40',
-    fontWeight: '300',
-  },
   label: {
+    ...FONT.label,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#ffffff40',
+    color: 'rgba(255,255,255,0.25)',
     letterSpacing: 4,
     marginBottom: 8,
   },
   reasonText: {
-    fontSize: 13,
+    ...FONT.caption,
     fontWeight: '600',
+    fontSize: 13,
     marginBottom: 22,
     textAlign: 'center',
   },
@@ -263,16 +292,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   timeText: {
+    ...FONT.statLg,
     fontSize: 48,
-    fontWeight: '900',
     color: '#fff',
-    fontVariant: ['tabular-nums'],
   },
   timeLabel: {
+    ...FONT.label,
     fontSize: 12,
-    color: '#ffffff30',
+    color: 'rgba(255,255,255,0.2)',
     marginTop: 4,
-    letterSpacing: 1,
   },
   controls: {
     flexDirection: 'row',
@@ -283,15 +311,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: RADIUS.lg,
-    backgroundColor: '#ffffff08',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: 'rgba(255,255,255,0.06)',
     minHeight: 48,
     justifyContent: 'center',
   },
   controlText: {
+    ...FONT.subhead,
     fontSize: 14,
-    fontWeight: '600',
     color: COLORS.textSecondary,
   },
   controlBtnAccent: {
@@ -303,6 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlTextAccent: {
+    ...FONT.subhead,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -314,13 +343,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doneBtnText: {
+    ...FONT.subhead,
     fontSize: 16,
     fontWeight: '800',
     color: '#fff',
   },
   tip: {
+    ...FONT.subhead,
     fontSize: 14,
-    fontWeight: '600',
     marginTop: 24,
   },
 });

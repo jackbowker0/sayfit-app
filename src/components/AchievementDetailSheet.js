@@ -1,7 +1,7 @@
 // ============================================================
 // ACHIEVEMENT DETAIL SHEET — Bottom sheet for badge details
 //
-// Shows: emoji, name, tier, when earned, coach reaction,
+// Shows: icon, name, tier, when earned, coach reaction,
 // progress toward next tier (if applicable).
 // Follows the spring-animated Modal pattern used elsewhere.
 // ============================================================
@@ -11,10 +11,12 @@ import {
   View, Text, TouchableOpacity, Modal, Animated,
   Dimensions, StyleSheet, Platform,
 } from 'react-native';
+import { Lock } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
-import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { COACH_ICONS, getTierIcon, getAchievementIcon } from '../constants/icons';
+import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { TIER_CONFIG } from '../services/achievements';
 import * as haptics from '../services/haptics';
@@ -26,6 +28,7 @@ const TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
 export default function AchievementDetailSheet({ badge, visible, onClose }) {
   const { coachId } = useWorkoutContext();
   const coach = COACHES[coachId];
+  const CoachIcon = COACH_ICONS[coachId] || COACH_ICONS.hype;
   const { colors, isDark } = useTheme();
   const slideAnim = useRef(new Animated.Value(SCREEN_H)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -74,6 +77,10 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
       })
     : null;
 
+  // Badge icon from Lucide
+  const BadgeIcon = getAchievementIcon(badge.category);
+  const TierIcon = getTierIcon(badge.tier);
+
   // Coach reaction
   const coachMessage = badge.coachMessages?.[coachId] || '';
 
@@ -112,25 +119,25 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
           bottom: 0,
           left: 0,
           right: 0,
-          backgroundColor: colors.bgElevated || colors.bgCard,
+          backgroundColor: colors.bgSheet || colors.bgElevated || colors.bgCard,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
           paddingBottom: Platform.OS === 'ios' ? 40 : 24,
           transform: [{ translateY: slideAnim }],
-          ...(!isDark ? {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 20,
-            elevation: 10,
-          } : {}),
+          borderTopWidth: 1,
+          borderColor: colors.glassBorder,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.25,
+          shadowRadius: 20,
+          elevation: 10,
         }}
       >
         {/* Drag indicator */}
         <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 8 }}>
           <View style={{
             width: 40, height: 4, borderRadius: 2,
-            backgroundColor: colors.textMuted + '40',
+            backgroundColor: colors.bgSheetHandle || (colors.textMuted + '40'),
           }} />
         </View>
 
@@ -143,22 +150,24 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
               borderWidth: 2.5,
               borderColor: isEarned ? tier.color : colors.border,
               alignItems: 'center', justifyContent: 'center',
-              ...(isEarned ? {
+              ...(isEarned && isDark ? {
                 shadowColor: tier.color,
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.4,
-                shadowRadius: 16,
+                shadowRadius: GLOW.lg,
               } : {}),
             }}>
-              <Text style={{
-                fontSize: 36,
-                opacity: isEarned ? 1 : 0.3,
-              }}>{badge.emoji}</Text>
+              <BadgeIcon
+                size={36}
+                color={isEarned ? tier.color : colors.textDim}
+                strokeWidth={1.8}
+                style={{ opacity: isEarned ? 1 : 0.3 }}
+              />
             </View>
 
             {/* Name */}
             <Text style={{
-              fontSize: 22, fontWeight: '800',
+              ...FONT.heading, fontSize: 22,
               color: isEarned ? colors.textPrimary : colors.textMuted,
               marginTop: 14, textAlign: 'center',
             }}>
@@ -170,11 +179,12 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
               backgroundColor: isEarned ? tier.color + '20' : colors.bgSubtle,
               paddingHorizontal: 12, paddingVertical: 4,
               borderRadius: 12, marginTop: 6,
+              flexDirection: 'row', alignItems: 'center', gap: 4,
             }}>
+              <TierIcon size={11} color={isEarned ? tier.color : colors.textMuted} strokeWidth={2.5} />
               <Text style={{
-                fontSize: 11, fontWeight: '700',
+                ...FONT.label, fontSize: 11,
                 color: isEarned ? tier.color : colors.textMuted,
-                letterSpacing: 1, textTransform: 'uppercase',
               }}>
                 {tier.label}
               </Text>
@@ -183,8 +193,8 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
 
           {/* Description */}
           <Text style={{
-            fontSize: 15, color: colors.textSecondary,
-            textAlign: 'center', lineHeight: 22, marginBottom: 20,
+            ...FONT.body, color: colors.textSecondary,
+            textAlign: 'center', marginBottom: 20,
           }}>
             {badge.description}
           </Text>
@@ -195,13 +205,13 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
               flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
               marginBottom: 16, gap: 6,
             }}>
-              <Text style={{ fontSize: 13, color: colors.textMuted }}>Earned</Text>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary }}>
+              <Text style={{ ...FONT.caption, color: colors.textMuted }}>Earned</Text>
+              <Text style={{ ...FONT.caption, fontWeight: '600', color: colors.textSecondary }}>
                 {earnedDate}
               </Text>
               {badge.count > 1 && (
-                <Text style={{ fontSize: 12, color: coach.color, fontWeight: '600' }}>
-                  × {badge.count}
+                <Text style={{ ...FONT.caption, color: coach.color, fontWeight: '600' }}>
+                  \u00D7 {badge.count}
                 </Text>
               )}
             </View>
@@ -214,8 +224,8 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
                 flexDirection: 'row', justifyContent: 'space-between',
                 marginBottom: 6,
               }}>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>Progress</Text>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>
+                <Text style={{ ...FONT.caption, color: colors.textMuted }}>Progress</Text>
+                <Text style={{ ...FONT.caption, fontWeight: '600', color: colors.textSecondary }}>
                   {progress}/{threshold}
                 </Text>
               </View>
@@ -228,6 +238,12 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
                   height: '100%', borderRadius: 4,
                   backgroundColor: tier.color,
                   width: `${Math.round(progressPct * 100)}%`,
+                  ...(isDark ? {
+                    shadowColor: tier.color,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.5,
+                    shadowRadius: GLOW.sm,
+                  } : {}),
                 }} />
               </View>
             </View>
@@ -236,7 +252,7 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
           {/* Coach reaction */}
           {isEarned && coachMessage ? (
             <View style={{
-              backgroundColor: isDark ? coach.color + '10' : coach.color + '06',
+              backgroundColor: colors.glassBg,
               borderRadius: RADIUS.lg,
               borderWidth: 1,
               borderColor: coach.color + '25',
@@ -244,17 +260,23 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
               marginBottom: 8,
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                <Text style={{ fontSize: 20 }}>{coach.emoji}</Text>
+                <View style={{
+                  width: 32, height: 32, borderRadius: 16,
+                  backgroundColor: coach.color + '15',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <CoachIcon size={18} color={coach.color} strokeWidth={2} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{
-                    fontSize: 11, fontWeight: '600', color: coach.color,
-                    letterSpacing: 0.5, marginBottom: 4,
+                    ...FONT.label, fontSize: 11, color: coach.color,
+                    marginBottom: 4,
                   }}>
                     {coach.name.toUpperCase()} SAYS
                   </Text>
                   <Text style={{
-                    fontSize: 14, color: colors.textSecondary,
-                    lineHeight: 20, fontStyle: 'italic',
+                    ...FONT.body, fontSize: 14, color: colors.textSecondary,
+                    fontStyle: 'italic',
                   }}>
                     "{coachMessage}"
                   </Text>
@@ -266,14 +288,20 @@ export default function AchievementDetailSheet({ badge, visible, onClose }) {
           {/* Locked state message */}
           {!isEarned && (
             <View style={{
-              backgroundColor: colors.bgSubtle,
+              backgroundColor: colors.glassBg,
               borderRadius: RADIUS.lg,
+              borderWidth: 1,
+              borderColor: colors.glassBorder,
               padding: SPACING.md,
               marginBottom: 8,
               alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: 8,
             }}>
-              <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center' }}>
-                🔒 Keep going — this badge is waiting for you!
+              <Lock size={14} color={colors.textMuted} strokeWidth={2} />
+              <Text style={{ ...FONT.caption, color: colors.textMuted, textAlign: 'center' }}>
+                Keep going \u2014 this badge is waiting for you!
               </Text>
             </View>
           )}

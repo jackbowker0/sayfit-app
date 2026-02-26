@@ -42,6 +42,15 @@ export const lightPalette = {
   // Shadows (light mode only — dark mode uses borders)
   shadow: 'rgba(0,0,0,0.06)',
   shadowMd: 'rgba(0,0,0,0.1)',
+
+  // Glass-morphism
+  glassBg: 'rgba(255, 255, 255, 0.8)',
+  glassBorder: 'rgba(0,0,0,0.06)',
+  glassHighlight: 'rgba(255,255,255,0.5)',
+  bgGradientStart: '#F5F5F7',
+  bgGradientEnd: '#EEEEF2',
+  bgSheet: '#FFFFFF',
+  bgSheetHandle: 'rgba(0,0,0,0.15)',
 };
 
 export const darkPalette = {
@@ -78,6 +87,15 @@ export const darkPalette = {
   // Shadows (not really visible in dark, but kept for consistency)
   shadow: 'rgba(0,0,0,0.3)',
   shadowMd: 'rgba(0,0,0,0.5)',
+
+  // Glass-morphism
+  glassBg: 'rgba(22, 22, 32, 0.7)',
+  glassBorder: 'rgba(255,255,255,0.06)',
+  glassHighlight: 'rgba(255,255,255,0.03)',
+  bgGradientStart: '#0A0A0F',
+  bgGradientEnd: '#0F0F1A',
+  bgSheet: '#1A1A28',
+  bgSheetHandle: 'rgba(255,255,255,0.15)',
 };
 
 // ---- BACKWARD COMPATIBILITY ----
@@ -97,6 +115,7 @@ export const SPACING = {
   lg: 20,
   xl: 32,
   xxl: 48,
+  screenPadding: 20,
 };
 
 export const RADIUS = {
@@ -109,12 +128,31 @@ export const RADIUS = {
 
 // ---- TYPOGRAPHY ----
 export const FONT = {
+  hero: { fontSize: 34, fontWeight: '800', letterSpacing: -0.8 },
   title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
   heading: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  subhead: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2 },
   body: { fontSize: 15, fontWeight: '400', lineHeight: 22 },
   caption: { fontSize: 12, fontWeight: '500' },
   label: { fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
   stat: { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  statLg: { fontSize: 36, fontWeight: '800', fontVariant: ['tabular-nums'] },
+};
+
+// ---- ANIMATION TIMING ----
+export const TIMING = {
+  fast: 150,
+  normal: 250,
+  slow: 400,
+  spring: { damping: 15, stiffness: 150 },
+  springBouncy: { damping: 12, stiffness: 180 },
+};
+
+// ---- GLOW SIZES ----
+export const GLOW = {
+  sm: 4,
+  md: 8,
+  lg: 16,
 };
 
 // ---- HELPERS ----

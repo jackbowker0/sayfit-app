@@ -78,28 +78,28 @@ export const DAY_OPTIONS = [
 
 // ---- GOAL OPTIONS ----
 export const GOAL_OPTIONS = [
-  { id: 'muscle', label: 'Build Muscle', emoji: '💪' },
-  { id: 'lose_weight', label: 'Lose Weight', emoji: '🔥' },
-  { id: 'toned', label: 'Get Toned', emoji: '✨' },
-  { id: 'active', label: 'Stay Active', emoji: '🏃' },
-  { id: 'flexibility', label: 'Flexibility', emoji: '🧘' },
-  { id: 'endurance', label: 'Endurance', emoji: '🫀' },
-  { id: 'strength', label: 'Get Stronger', emoji: '🏋️' },
+  { id: 'muscle', emoji: '💪', iconName: 'muscle', label: 'Build Muscle' },
+  { id: 'lose_weight', emoji: '🔥', iconName: 'lose_weight', label: 'Lose Weight' },
+  { id: 'toned', emoji: '✨', iconName: 'toned', label: 'Get Toned' },
+  { id: 'active', emoji: '🏃', iconName: 'active', label: 'Stay Active' },
+  { id: 'flexibility', emoji: '🧘', iconName: 'flexibility', label: 'Flexibility' },
+  { id: 'endurance', emoji: '🫀', iconName: 'endurance', label: 'Endurance' },
+  { id: 'strength', emoji: '🏋️', iconName: 'strength', label: 'Get Stronger' },
 ];
 
 // ---- EQUIPMENT OPTIONS ----
 export const EQUIPMENT_OPTIONS = [
-  { id: 'bodyweight', label: 'Bodyweight Only', emoji: '🤸' },
-  { id: 'dumbbells', label: 'Dumbbells', emoji: '🏋️' },
-  { id: 'bands', label: 'Resistance Bands', emoji: '🔗' },
-  { id: 'full_gym', label: 'Full Gym', emoji: '🏢' },
+  { id: 'bodyweight', emoji: '🤸', iconName: 'bodyweight', label: 'Bodyweight Only' },
+  { id: 'dumbbells', emoji: '🏋️', iconName: 'dumbbells', label: 'Dumbbells' },
+  { id: 'bands', emoji: '🔗', iconName: 'bands', label: 'Resistance Bands' },
+  { id: 'full_gym', emoji: '🏢', iconName: 'full_gym', label: 'Full Gym' },
 ];
 
 // ---- FITNESS LEVELS ----
 export const FITNESS_LEVELS = [
-  { id: 'beginner', label: 'Beginner', desc: 'New to working out or getting back into it', emoji: '🌱' },
-  { id: 'intermediate', label: 'Intermediate', desc: 'Consistent for a few months, know the basics', emoji: '🔥' },
-  { id: 'advanced', label: 'Advanced', desc: 'Years of training, pushing for PRs', emoji: '⚡' },
+  { id: 'beginner', emoji: '🌱', iconName: 'beginner', label: 'Beginner', desc: 'New to working out or getting back into it' },
+  { id: 'intermediate', emoji: '🔥', iconName: 'intermediate', label: 'Intermediate', desc: 'Consistent for a few months, know the basics' },
+  { id: 'advanced', emoji: '⚡', iconName: 'advanced', label: 'Advanced', desc: 'Years of training, pushing for PRs' },
 ];
 
 /**

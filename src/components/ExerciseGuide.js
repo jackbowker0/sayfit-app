@@ -19,9 +19,13 @@ import {
   View, Text, TouchableOpacity, Modal, ScrollView,
   Animated, Platform,
 } from 'react-native';
+import {
+  X, Wind, Info, TrendingDown, TrendingUp, Flame,
+} from 'lucide-react-native';
 
 import { getExerciseById } from '../constants/exercises';
-import { RADIUS, SPACING } from '../constants/theme';
+import { getMuscleIcon } from '../constants/icons';
+import { RADIUS, SPACING, FONT, GLOW } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 
 export default function ExerciseGuide({
@@ -59,6 +63,9 @@ export default function ExerciseGuide({
   const easierEx = exercise.easierSwap ? getExerciseById(exercise.easierSwap) : null;
   const harderEx = exercise.harderSwap ? getExerciseById(exercise.harderSwap) : null;
 
+  // Get muscle icon for exercise
+  const ExerciseIcon = getMuscleIcon(exercise.muscle);
+
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       {/* Backdrop */}
@@ -73,16 +80,22 @@ export default function ExerciseGuide({
       <Animated.View style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         maxHeight: '85%',
-        backgroundColor: isDark ? '#0d1117' : colors.bgCard,
+        backgroundColor: colors.bgSheet || colors.bgElevated,
         borderTopLeftRadius: 24, borderTopRightRadius: 24,
         paddingTop: 12,
         paddingBottom: Platform.OS === 'ios' ? 40 : 24,
         transform: [{ translateY: slideAnim }],
+        borderTopWidth: 1,
+        borderColor: colors.glassBorder,
         shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20,
         shadowOffset: { width: 0, height: -5 }, elevation: 20,
       }}>
         {/* Handle */}
-        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.textDim + '40', alignSelf: 'center', marginBottom: 16 }} />
+        <View style={{
+          width: 36, height: 4, borderRadius: 2,
+          backgroundColor: colors.bgSheetHandle || (colors.textDim + '40'),
+          alignSelf: 'center', marginBottom: 16,
+        }} />
 
         <ScrollView
           contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: 20 }}
@@ -93,41 +106,52 @@ export default function ExerciseGuide({
             <View style={{
               width: 52, height: 52, borderRadius: 16,
               backgroundColor: coachColor + '15', justifyContent: 'center', alignItems: 'center', marginRight: 14,
+              ...(isDark ? {
+                shadowColor: coachColor,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.2,
+                shadowRadius: GLOW.sm,
+              } : {}),
             }}>
-              <Text style={{ fontSize: 28 }}>{exercise.icon || '💪'}</Text>
+              <ExerciseIcon size={26} color={coachColor} strokeWidth={1.8} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary }}>{exercise.name}</Text>
+              <Text style={{ ...FONT.heading, color: colors.textPrimary }}>{exercise.name}</Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>{exercise.muscle}</Text>
+                <Text style={{ ...FONT.caption, color: colors.textMuted }}>{exercise.muscle}</Text>
                 {exercise.equipment !== 'none' && (
                   <>
-                    <Text style={{ fontSize: 12, color: colors.textDim }}>·</Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{exercise.equipment}</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textDim }}>\u00B7</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textMuted }}>{exercise.equipment}</Text>
                   </>
                 )}
-                <Text style={{ fontSize: 12, color: colors.textDim }}>·</Text>
-                <Text style={{ fontSize: 12, color: colors.textMuted }}>Intensity {exercise.intensity}/10</Text>
+                <Text style={{ ...FONT.caption, color: colors.textDim }}>\u00B7</Text>
+                <Text style={{ ...FONT.caption, color: colors.textMuted }}>Intensity {exercise.intensity}/10</Text>
               </View>
             </View>
             <TouchableOpacity
               onPress={onClose}
-              style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgSubtle, justifyContent: 'center', alignItems: 'center' }}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: colors.glassBg,
+                borderWidth: 1, borderColor: colors.glassBorder,
+                justifyContent: 'center', alignItems: 'center',
+              }}
               accessibilityLabel="Close exercise guide"
             >
-              <Text style={{ fontSize: 16, color: colors.textMuted }}>✕</Text>
+              <X size={16} color={colors.textMuted} strokeWidth={2} />
             </TouchableOpacity>
           </View>
 
           {/* Description */}
-          <Text style={{ fontSize: 15, color: colors.textSecondary, lineHeight: 22, marginBottom: 20 }}>
+          <Text style={{ ...FONT.body, color: colors.textSecondary, marginBottom: 20 }}>
             {exercise.description}
           </Text>
 
           {/* Steps */}
           {hasGuideData ? (
             <View style={{ marginBottom: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textDim, letterSpacing: 1.5, marginBottom: 12 }}>
+              <Text style={{ ...FONT.label, color: colors.textDim, marginBottom: 12 }}>
                 HOW TO DO IT
               </Text>
               {steps.map((step, i) => (
@@ -137,19 +161,19 @@ export default function ExerciseGuide({
                     backgroundColor: coachColor + '15', justifyContent: 'center', alignItems: 'center',
                     marginRight: 12, marginTop: 1,
                   }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: coachColor }}>{i + 1}</Text>
+                    <Text style={{ ...FONT.caption, fontWeight: '700', color: coachColor }}>{i + 1}</Text>
                   </View>
-                  <Text style={{ flex: 1, fontSize: 15, color: colors.textPrimary, lineHeight: 22 }}>{step}</Text>
+                  <Text style={{ flex: 1, ...FONT.body, color: colors.textPrimary }}>{step}</Text>
                 </View>
               ))}
             </View>
           ) : (
             <View style={{
               padding: 16, borderRadius: RADIUS.md,
-              backgroundColor: colors.bgSubtle, borderWidth: 1, borderColor: colors.border,
+              backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder,
               marginBottom: 20, alignItems: 'center',
             }}>
-              <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center' }}>
+              <Text style={{ ...FONT.caption, color: colors.textMuted, textAlign: 'center' }}>
                 Detailed form guide coming soon!{'\n'}For now, use the description above.
               </Text>
             </View>
@@ -162,10 +186,16 @@ export default function ExerciseGuide({
               backgroundColor: '#7FDBFF' + '10', borderWidth: 1, borderColor: '#7FDBFF' + '20',
               marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 10,
             }}>
-              <Text style={{ fontSize: 20 }}>🌬️</Text>
+              <View style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: '#7FDBFF' + '15',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Wind size={18} color="#7FDBFF" strokeWidth={2} />
+              </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#7FDBFF', letterSpacing: 1, marginBottom: 2 }}>BREATHING</Text>
-                <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>{breathe}</Text>
+                <Text style={{ ...FONT.label, fontSize: 11, color: '#7FDBFF', marginBottom: 2 }}>BREATHING</Text>
+                <Text style={{ ...FONT.body, fontSize: 14, color: colors.textSecondary }}>{breathe}</Text>
               </View>
             </View>
           )}
@@ -173,16 +203,19 @@ export default function ExerciseGuide({
           {/* Tips */}
           {tips.length > 0 && (
             <View style={{ marginBottom: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textDim, letterSpacing: 1.5, marginBottom: 10 }}>
-                💡 TIPS
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+                <Info size={12} color={colors.textDim} strokeWidth={2} />
+                <Text style={{ ...FONT.label, color: colors.textDim }}>
+                  TIPS
+                </Text>
+              </View>
               {tips.map((tip, i) => (
                 <View key={i} style={{
                   flexDirection: 'row', alignItems: 'flex-start',
                   marginBottom: 8, paddingLeft: 4,
                 }}>
-                  <Text style={{ fontSize: 14, color: coachColor, marginRight: 8, marginTop: 1 }}>•</Text>
-                  <Text style={{ flex: 1, fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>{tip}</Text>
+                  <Text style={{ fontSize: 14, color: coachColor, marginRight: 8, marginTop: 1 }}>{'\u2022'}</Text>
+                  <Text style={{ flex: 1, ...FONT.body, fontSize: 14, color: colors.textSecondary }}>{tip}</Text>
                 </View>
               ))}
             </View>
@@ -191,7 +224,7 @@ export default function ExerciseGuide({
           {/* Modifications */}
           {(easierEx || harderEx) && (
             <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textDim, letterSpacing: 1.5, marginBottom: 10 }}>
+              <Text style={{ ...FONT.label, color: colors.textDim, marginBottom: 10 }}>
                 MODIFICATIONS
               </Text>
               {easierEx && (
@@ -201,11 +234,17 @@ export default function ExerciseGuide({
                   backgroundColor: colors.green + '08', borderWidth: 1, borderColor: colors.green + '15',
                   marginBottom: 8,
                 }}>
-                  <Text style={{ fontSize: 16 }}>💨</Text>
+                  <View style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    backgroundColor: colors.green + '15',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <TrendingDown size={15} color={colors.green} strokeWidth={2} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.green, marginBottom: 1 }}>EASIER</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>{easierEx.name}</Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>{easierEx.description}</Text>
+                    <Text style={{ ...FONT.label, fontSize: 11, color: colors.green, marginBottom: 1 }}>EASIER</Text>
+                    <Text style={{ ...FONT.subhead, fontSize: 14, color: colors.textPrimary }}>{easierEx.name}</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 1 }}>{easierEx.description}</Text>
                   </View>
                 </View>
               )}
@@ -215,11 +254,17 @@ export default function ExerciseGuide({
                   padding: 12, borderRadius: RADIUS.md,
                   backgroundColor: colors.red + '08', borderWidth: 1, borderColor: colors.red + '15',
                 }}>
-                  <Text style={{ fontSize: 16 }}>🔥</Text>
+                  <View style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    backgroundColor: colors.red + '15',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Flame size={15} color={colors.red} strokeWidth={2} />
+                  </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.red, marginBottom: 1 }}>HARDER</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>{harderEx.name}</Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 1 }}>{harderEx.description}</Text>
+                    <Text style={{ ...FONT.label, fontSize: 11, color: colors.red, marginBottom: 1 }}>HARDER</Text>
+                    <Text style={{ ...FONT.subhead, fontSize: 14, color: colors.textPrimary }}>{harderEx.name}</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 1 }}>{harderEx.description}</Text>
                   </View>
                 </View>
               )}

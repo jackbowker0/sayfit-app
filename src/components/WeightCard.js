@@ -12,14 +12,20 @@ import {
   Animated, Dimensions, KeyboardAvoidingView, Platform,
   TouchableWithoutFeedback, Keyboard,
 } from 'react-native';
+import {
+  Scale, TrendingUp, TrendingDown, ArrowRight,
+  Check, BarChart3,
+} from 'lucide-react-native';
 
-import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
+import { COACH_ICONS } from '../constants/icons';
 import { useTheme } from '../hooks/useTheme';
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
 import { getWeightStats, saveWeight } from '../services/bodyWeight';
 import { getUserProfile } from '../services/userProfile';
 import * as haptics from '../services/haptics';
+import GlassCard from './GlassCard';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -27,6 +33,7 @@ export default function WeightCard({ onWeightLogged, navigation }) {
   const { coachId } = useWorkoutContext();
   const coach = COACHES[coachId];
   const { colors, isDark } = useTheme();
+  const CoachIcon = COACH_ICONS[coachId] || COACH_ICONS.hype;
 
   const [stats, setStats] = useState(null);
   const [units, setUnits] = useState('lbs');
@@ -94,9 +101,9 @@ export default function WeightCard({ onWeightLogged, navigation }) {
 
   const getTrendArrow = () => {
     if (!stats || stats.weekChange === null) return null;
-    if (Math.abs(stats.weekChange) < 0.1) return { arrow: '→', color: colors.textMuted, label: 'stable' };
-    if (stats.weekChange > 0) return { arrow: '↑', color: colors.orange, label: `+${stats.weekChange.toFixed(1)}` };
-    return { arrow: '↓', color: colors.green, label: `${stats.weekChange.toFixed(1)}` };
+    if (Math.abs(stats.weekChange) < 0.1) return { Icon: ArrowRight, color: colors.textMuted, label: 'stable' };
+    if (stats.weekChange > 0) return { Icon: TrendingUp, color: colors.orange, label: `+${stats.weekChange.toFixed(1)}` };
+    return { Icon: TrendingDown, color: colors.green, label: `${stats.weekChange.toFixed(1)}` };
   };
 
   const getTimeSinceLog = () => {
@@ -111,7 +118,7 @@ export default function WeightCard({ onWeightLogged, navigation }) {
     if (!stats?.currentDate) {
       return {
         drill: "Log your weight. Data drives results.",
-        hype: "Let's track your weight! Tap here! ✨",
+        hype: "Let's track your weight! Tap here!",
         zen: "Begin tracking your body's journey.",
       }[coachId];
     }
@@ -119,7 +126,7 @@ export default function WeightCard({ onWeightLogged, navigation }) {
     if (daysSince >= 7) {
       return {
         drill: "Weight log is stale. Update it.",
-        hype: "Time for a weigh-in! 📊",
+        hype: "Time for a weigh-in!",
         zen: "A new measurement awaits.",
       }[coachId];
     }
@@ -131,102 +138,94 @@ export default function WeightCard({ onWeightLogged, navigation }) {
   const nudge = getCoachNudge();
   const hasData = stats && stats.current !== null;
 
-  const cardStyle = {
-    backgroundColor: colors.bgCard,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: nudge && !hasData ? coach.color + '30' : colors.border,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    ...(isDark ? {} : {
-      shadowColor: 'rgba(0,0,0,0.06)',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 1,
-      shadowRadius: 8,
-      elevation: 2,
-    }),
-  };
-
   return (
     <>
       {/* ---- DASHBOARD CARD ---- */}
-      <TouchableOpacity
-        style={cardStyle}
-        onPress={openSheet}
-        activeOpacity={0.7}
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={
-          hasData
-            ? `Body weight: ${stats.current} ${units}, logged ${timeAgo}. Tap to update.`
-            : 'Log your body weight. Tap to add entry.'
-        }
+      <GlassCard
+        accentColor={nudge && !hasData ? coach.color : undefined}
+        glow={!!(nudge && !hasData)}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {/* Scale icon */}
-          <View style={{
-            width: 40, height: 40, borderRadius: 12,
-            backgroundColor: coach.color + '12',
-            alignItems: 'center', justifyContent: 'center',
-            marginRight: 12,
-          }}>
-            <Text style={{ fontSize: 18 }}>⚖️</Text>
-          </View>
+        <TouchableOpacity
+          onPress={openSheet}
+          activeOpacity={0.7}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={
+            hasData
+              ? `Body weight: ${stats.current} ${units}, logged ${timeAgo}. Tap to update.`
+              : 'Log your body weight. Tap to add entry.'
+          }
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Scale icon */}
+            <View style={{
+              width: 40, height: 40, borderRadius: 12,
+              backgroundColor: coach.color + '12',
+              alignItems: 'center', justifyContent: 'center',
+              marginRight: 12,
+            }}>
+              <Scale size={18} color={coach.color} strokeWidth={2.5} />
+            </View>
 
-          {/* Weight display */}
-          <View style={{ flex: 1 }}>
-            {hasData ? (
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                <Text style={{
-                  fontSize: 22, fontWeight: '800', color: colors.textPrimary,
-                  fontVariant: ['tabular-nums'],
-                }}>
-                  {stats.current}
+            {/* Weight display */}
+            <View style={{ flex: 1 }}>
+              {hasData ? (
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                  <Text style={{
+                    ...FONT.stat, color: colors.textPrimary,
+                  }}>
+                    {stats.current}
+                  </Text>
+                  <Text style={{
+                    ...FONT.caption, fontWeight: '600', color: colors.textMuted,
+                  }}>
+                    {units}
+                  </Text>
+                  {trend && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4, gap: 3 }}>
+                      <trend.Icon size={13} color={trend.color} strokeWidth={2.5} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: trend.color }}>
+                        {trend.label}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <Text style={{ ...FONT.subhead, color: colors.textSecondary }}>
+                  Log your weight
                 </Text>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textMuted }}>
-                  {units}
-                </Text>
-                {trend && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: trend.color }}>
-                      {trend.arrow} {trend.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary }}>
-                Log your weight
+              )}
+              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>
+                {hasData ? `logged ${timeAgo}` : nudge || 'tap to start tracking'}
               </Text>
-            )}
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-              {hasData ? `logged ${timeAgo}` : nudge || 'tap to start tracking'}
-            </Text>
+            </View>
+
+            {/* Tap indicator */}
+            <View style={{
+              paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm,
+              backgroundColor: colors.bgSubtle,
+            }}>
+              <Text style={{ ...FONT.label, fontSize: 11, color: colors.textMuted }}>
+                {hasData ? 'update' : '+ add'}
+              </Text>
+            </View>
           </View>
 
-          {/* Tap indicator */}
-          <View style={{
-            paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm,
-            backgroundColor: colors.bgSubtle,
-          }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>
-              {hasData ? 'update' : '+ add'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Nudge bar — only shows when weight log is stale or empty */}
-        {nudge && hasData && (
-          <View style={{
-            marginTop: 10, paddingTop: 10,
-            borderTopWidth: 1, borderTopColor: colors.border,
-          }}>
-            <Text style={{ fontSize: 12, color: coach.color, fontStyle: 'italic' }}>
-              {coach.emoji} {nudge}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+          {/* Nudge bar -- only shows when weight log is stale or empty */}
+          {nudge && hasData && (
+            <View style={{
+              marginTop: 10, paddingTop: 10,
+              borderTopWidth: 1, borderTopColor: colors.border,
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+            }}>
+              <CoachIcon size={14} color={coach.color} strokeWidth={2} />
+              <Text style={{ fontSize: 12, color: coach.color, fontStyle: 'italic' }}>
+                {nudge}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </GlassCard>
 
       {/* ---- BOTTOM SHEET MODAL ---- */}
       <Modal visible={sheetOpen} transparent animationType="none" onRequestClose={closeSheet}>
@@ -242,41 +241,42 @@ export default function WeightCard({ onWeightLogged, navigation }) {
           style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}
         >
           <Animated.View style={{
-            backgroundColor: colors.bgElevated,
+            backgroundColor: colors.bgSheet || colors.bgElevated,
             borderTopLeftRadius: 20, borderTopRightRadius: 20,
             paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
             paddingHorizontal: SPACING.lg,
             transform: [{ translateY: slideAnim }],
-            ...(isDark ? { borderTopWidth: 1, borderColor: colors.border } : {
-              shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-              shadowOpacity: 0.15, shadowRadius: 20, elevation: 20,
-            }),
+            borderTopWidth: 1,
+            borderColor: colors.glassBorder,
+            shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.25, shadowRadius: 20, elevation: 20,
           }}>
             {/* Handle */}
             <View style={{
               width: 36, height: 4, borderRadius: 2,
-              backgroundColor: colors.textDim, alignSelf: 'center', marginBottom: 20,
+              backgroundColor: colors.bgSheetHandle || colors.textDim,
+              alignSelf: 'center', marginBottom: 20,
             }} />
 
             {/* Title */}
             <Text style={{
-              fontSize: 20, fontWeight: '800', color: colors.textPrimary,
+              ...FONT.heading, color: colors.textPrimary,
               marginBottom: 4,
             }}>
               Log Weight
             </Text>
-            <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 20 }}>
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginBottom: 20 }}>
               {hasData
-                ? `Last: ${stats.current} ${units} · ${timeAgo}`
-                : 'Your first weigh-in — let\'s go!'
+                ? `Last: ${stats.current} ${units} \u00B7 ${timeAgo}`
+                : 'Your first weigh-in \u2014 let\'s go!'
               }
             </Text>
 
             {/* Weight input */}
             <View style={{
               flexDirection: 'row', alignItems: 'center',
-              backgroundColor: colors.bgInput,
-              borderWidth: 1.5, borderColor: colors.borderFocus,
+              backgroundColor: colors.glassBg,
+              borderWidth: 1.5, borderColor: colors.glassBorder,
               borderRadius: RADIUS.lg, paddingHorizontal: 16, marginBottom: 12,
             }}>
               <TextInput
@@ -306,15 +306,15 @@ export default function WeightCard({ onWeightLogged, navigation }) {
             {/* Optional note */}
             <TextInput
               style={{
-                backgroundColor: colors.bgInput,
-                borderWidth: 1, borderColor: colors.border,
+                backgroundColor: colors.glassBg,
+                borderWidth: 1, borderColor: colors.glassBorder,
                 borderRadius: RADIUS.md, padding: 14,
                 fontSize: 14, color: colors.textPrimary,
                 marginBottom: 20,
               }}
               value={noteValue}
               onChangeText={setNoteValue}
-              placeholder="Note (optional) — morning, post-run..."
+              placeholder="Note (optional) \u2014 morning, post-run..."
               placeholderTextColor={colors.textDim}
               maxLength={50}
               accessibilityLabel="Optional note for this weigh-in"
@@ -328,8 +328,8 @@ export default function WeightCard({ onWeightLogged, navigation }) {
                     key={delta}
                     style={{
                       paddingHorizontal: 14, paddingVertical: 8,
-                      borderRadius: RADIUS.md, backgroundColor: colors.bgSubtle,
-                      borderWidth: 1, borderColor: colors.border,
+                      borderRadius: RADIUS.md, backgroundColor: colors.glassBg,
+                      borderWidth: 1, borderColor: colors.glassBorder,
                     }}
                     onPress={() => {
                       haptics.tick();
@@ -356,8 +356,9 @@ export default function WeightCard({ onWeightLogged, navigation }) {
               <TouchableOpacity
                 style={{
                   flex: 1, paddingVertical: 14, borderRadius: RADIUS.lg,
-                  backgroundColor: colors.bgSubtle, alignItems: 'center',
-                  borderWidth: 1, borderColor: colors.border,
+                  backgroundColor: colors.glassBg, alignItems: 'center',
+                  borderWidth: 1, borderColor: colors.glassBorder,
+                  flexDirection: 'row', justifyContent: 'center', gap: 6,
                 }}
                 onPress={() => {
                   haptics.tap();
@@ -368,8 +369,9 @@ export default function WeightCard({ onWeightLogged, navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel="View weight history"
               >
+                <BarChart3 size={15} color={colors.textSecondary} strokeWidth={2} />
                 <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary }}>
-                  History 📊
+                  History
                 </Text>
               </TouchableOpacity>
 
@@ -379,6 +381,13 @@ export default function WeightCard({ onWeightLogged, navigation }) {
                   flex: 2, paddingVertical: 14, borderRadius: RADIUS.lg,
                   backgroundColor: parseFloat(inputValue) > 0 ? coach.color : colors.bgSubtle,
                   alignItems: 'center',
+                  flexDirection: 'row', justifyContent: 'center', gap: 6,
+                  ...(parseFloat(inputValue) > 0 && isDark ? {
+                    shadowColor: coach.color,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: GLOW.md,
+                  } : {}),
                 }}
                 onPress={handleSave}
                 disabled={saving || !(parseFloat(inputValue) > 0)}
@@ -386,11 +395,12 @@ export default function WeightCard({ onWeightLogged, navigation }) {
                 accessibilityRole="button"
                 accessibilityLabel="Save weight entry"
               >
+                <Check size={15} color={parseFloat(inputValue) > 0 ? getTextOnColor(coach.color) : colors.textDim} strokeWidth={2.5} />
                 <Text style={{
                   fontSize: 15, fontWeight: '700',
                   color: parseFloat(inputValue) > 0 ? getTextOnColor(coach.color) : colors.textDim,
                 }}>
-                  {saving ? 'Saving...' : 'Save ✓'}
+                  {saving ? 'Saving...' : 'Save'}
                 </Text>
               </TouchableOpacity>
             </View>

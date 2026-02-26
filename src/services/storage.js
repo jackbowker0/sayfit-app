@@ -13,6 +13,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { updateChallengeProgress } from './challenges';
 
 const STORAGE_KEY = 'sayfit_history';
 
@@ -38,6 +39,12 @@ export async function saveWorkout(workoutData) {
     };
     history.push(entry);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+
+    // Update any active challenge progress in the background
+    updateChallengeProgress(entry).catch(e =>
+      console.warn('[Storage] Challenge progress update failed:', e)
+    );
+
     return entry;
   } catch (e) {
     console.warn('[Storage] Failed to save workout:', e);

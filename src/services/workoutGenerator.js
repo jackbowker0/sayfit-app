@@ -1,17 +1,21 @@
 /**
- * SayFit — Smart Workout Generator v2
+ * SayFit — AI-Powered Workout Generator
  *
- * Profile-aware: filters by user's equipment, scales to fitness level
- * Memory-aware: avoids recently-hit muscles, prioritizes neglected ones
- * Structured: warmup → main → cooldown when duration allows
+ * Sends user request + profile + memory + exercise library to Claude
+ * via Supabase Edge Function. Claude picks exercises from the library,
+ * client hydrates full exercise data from the EXERCISES constant.
  */
 
 import { EXERCISES } from '../constants/exercises';
-import { getUserProfile } from './userProfile';
+import { getUserProfile, buildProfilePromptString } from './userProfile';
 import { buildMemorySummary } from './storage';
 
-// ─── EQUIPMENT MAPPING ────────────────────────────────────────────
-// Maps profile equipment IDs to exercise equipment tags
+// ─── SUPABASE CONFIG ─────────────────────────────────────────────
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const WORKOUT_GEN_ENDPOINT = `${SUPABASE_URL}/functions/v1/workout-gen`;
+
+// ─── EQUIPMENT MAPPING ──────────────────────────────────────────
 const EQUIPMENT_MAP = {
   bodyweight: ['none', 'wall'],
   dumbbells: ['none', 'wall', 'chair', 'dumbbell'],
@@ -28,30 +32,7 @@ function getAllowedEquipment(profileEquipment) {
   return [...allowed];
 }
 
-// ─── INTENSITY RANGES BY FITNESS LEVEL ────────────────────────────
-const INTENSITY_RANGE = {
-  beginner: { min: 1, max: 6, sweet: 4 },
-  intermediate: { min: 3, max: 8, sweet: 6 },
-  advanced: { min: 5, max: 10, sweet: 8 },
-};
-
-// ─── MUSCLE MAPPING ───────────────────────────────────────────────
-const FOCUS_TO_MUSCLES = {
-  upper: ['Chest', 'Shoulders', 'Arms', 'Back'],
-  lower: ['Legs', 'Glutes'],
-  core: ['Core'],
-  cardio: ['Cardio'],
-  fullBody: ['Legs', 'Chest', 'Core', 'Back', 'Shoulders', 'Glutes', 'Arms', 'Cardio', 'Full Body'],
-  stretch: ['Legs', 'Back', 'Chest', 'Shoulders', 'Glutes', 'Full Body'],
-  back: ['Back'],
-  chest: ['Chest'],
-  arms: ['Arms'],
-  shoulders: ['Shoulders'],
-  legs: ['Legs'],
-  glutes: ['Glutes'],
-};
-
-// ─── PARSING ──────────────────────────────────────────────────────
+// ─── PARSING ────────────────────────────────────────────────────
 
 const TIME_PATTERNS = [
   { regex: /(\d+)\s*min(ute)?s?/i, extract: (m) => parseInt(m[1]) },
@@ -106,264 +87,210 @@ export function parseWorkoutRequest(input) {
   return { duration, energy, focusAreas, rawInput: input };
 }
 
-// ─── SMART WORKOUT BUILDER ────────────────────────────────────────
+// ─── AI WORKOUT GENERATION ──────────────────────────────────────
 
 export async function generateSmartWorkout(parsed) {
   const profile = await getUserProfile();
   const memory = await buildMemorySummary();
-  return buildWorkout(parsed, profile, memory);
-}
 
-// Sync version for regenerate (reuses profile/memory)
-let _cachedProfile = null;
-let _cachedMemory = null;
-
-export async function initGeneratorCache() {
-  _cachedProfile = await getUserProfile();
-  _cachedMemory = await buildMemorySummary();
-}
-
-export function generateWorkout(parsed) {
-  return buildWorkout(parsed, _cachedProfile, _cachedMemory);
-}
-
-function buildWorkout(parsed, profile, memory) {
-  const { duration, energy, focusAreas } = parsed;
-
-  // Get allowed equipment from profile
   const allowedEquipment = getAllowedEquipment(profile?.equipment);
+  const condensedExercises = getCondensedExerciseList(allowedEquipment);
 
-  // Get intensity range from fitness level
+  const system = buildWorkoutSystemPrompt();
+  const prompt = buildWorkoutUserPrompt(
+    parsed.rawInput || '', parsed, profile, memory, condensedExercises
+  );
+
+  const response = await fetch(WORKOUT_GEN_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ system, prompt, max_tokens: 1500 }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(`Workout generation failed: ${errData.error || response.status}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.text || '';
+  const aiWorkout = parseAIResponse(rawText);
+
+  return hydrateWorkout(aiWorkout, parsed, profile, allowedEquipment);
+}
+
+// Async regenerate (used by Shuffle button)
+export async function generateWorkout(parsed) {
+  return generateSmartWorkout(parsed);
+}
+
+// No-op; kept for API compatibility with JustTalkScreen
+export async function initGeneratorCache() {}
+
+// ─── CONDENSED EXERCISE LIST ────────────────────────────────────
+
+function getCondensedExerciseList(allowedEquipment) {
+  return EXERCISES
+    .filter(ex => allowedEquipment.includes(ex.equipment))
+    .map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      muscle: ex.muscle,
+      equipment: ex.equipment,
+      category: ex.category,
+      intensity: ex.intensity,
+    }));
+}
+
+// ─── AI PROMPT BUILDERS ─────────────────────────────────────────
+
+function buildWorkoutSystemPrompt() {
+  return `You are a workout generator for a fitness app. You select exercises from a provided library to create structured workouts.
+
+RESPOND WITH ONLY A JSON OBJECT. No markdown, no explanation, no code fences.
+
+The JSON must have this exact shape:
+{
+  "name": "string - short workout name like 'Easy 20-Min Core'",
+  "description": "string - one sentence description",
+  "estimatedCalories": number,
+  "workDuration": number (seconds per main exercise),
+  "restDuration": number (seconds rest between main exercises),
+  "exercises": [
+    {
+      "id": "exercise-id-from-library",
+      "phase": "warmup" | "main" | "cooldown",
+      "duration": number (seconds),
+      "rest": number (seconds, 0 for last exercise in workout)
+    }
+  ]
+}
+
+RULES:
+- ONLY use exercise IDs from the provided library. Never invent exercises.
+- Include 2-3 warmup exercises (category "warmup", 30s each, 5s rest) if duration >= 10 min.
+- Include 2-3 cooldown exercises (category "cooldown", 30s each, 5s rest) if duration >= 12 min.
+- Main exercises should be category "strength" or "cardio".
+- Match exercise intensity to the user's energy level and fitness level.
+- Avoid repeating the same muscle group back-to-back unless specifically requested.
+- Deprioritize recently-trained muscles (provided in context).
+- Prioritize neglected muscles when the user hasn't specified a focus.
+- Beginner: work 25-35s, rest 15-25s. Intermediate: work 35-45s, rest 10-20s. Advanced: work 40-50s, rest 5-15s.
+- Last exercise should have rest: 0.
+- The workout should fill the requested duration.`;
+}
+
+function buildWorkoutUserPrompt(rawInput, parsed, profile, memory, condensedExercises) {
+  const profileString = buildProfilePromptString(profile);
+  const memoryParts = [];
+
+  if (memory?.recentWorkouts?.length > 0) {
+    const recentMuscles = memory.recentWorkouts
+      .slice(0, 3)
+      .map(w => w.muscles?.join(', ') || 'unknown')
+      .join('; ');
+    memoryParts.push(`Recent workouts hit: ${recentMuscles}`);
+  }
+  if (memory?.neglectedMuscles?.length > 0) {
+    memoryParts.push(`Neglected muscles (not trained in 14+ days): ${memory.neglectedMuscles.join(', ')}`);
+  }
+  if (memory?.streak > 0) {
+    memoryParts.push(`Current streak: ${memory.streak} days`);
+  }
+
+  return `USER REQUEST: "${rawInput}"
+
+PARSED PARAMETERS:
+- Duration: ${parsed.duration} minutes
+- Energy level: ${parsed.energy}
+- Focus areas: ${parsed.focusAreas.join(', ')}
+
+USER PROFILE:
+${profileString || 'No profile available.'}
+- Fitness level: ${profile?.fitnessLevel || 'intermediate'}
+- Equipment: ${profile?.equipment?.join(', ') || 'bodyweight'}
+
+WORKOUT HISTORY:
+${memoryParts.length > 0 ? memoryParts.join('\n') : 'No workout history yet.'}
+- Total workouts completed: ${memory?.totalWorkouts || 0}
+
+AVAILABLE EXERCISES (use ONLY these IDs):
+${JSON.stringify(condensedExercises)}`;
+}
+
+// ─── RESPONSE PARSING & HYDRATION ───────────────────────────────
+
+function parseAIResponse(rawText) {
+  try {
+    return JSON.parse(rawText);
+  } catch (e) {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (e2) {
+        // fall through
+      }
+    }
+    throw new Error('Failed to parse AI workout response as JSON');
+  }
+}
+
+function hydrateWorkout(aiWorkout, parsed, profile, allowedEquipment) {
+  const exerciseMap = new Map(EXERCISES.map(ex => [ex.id, ex]));
+
+  const hydratedExercises = (aiWorkout.exercises || [])
+    .map(aiEx => {
+      const fullEx = exerciseMap.get(aiEx.id);
+      if (!fullEx) {
+        console.warn(`[WorkoutGen] Unknown exercise ID: ${aiEx.id}, skipping`);
+        return null;
+      }
+      return {
+        ...fullEx,
+        duration: aiEx.duration || fullEx.duration,
+        rest: aiEx.rest ?? 15,
+        phase: aiEx.phase || 'main',
+      };
+    })
+    .filter(Boolean);
+
+  if (hydratedExercises.length === 0) {
+    throw new Error('AI returned no valid exercises');
+  }
+
   const level = profile?.fitnessLevel || 'intermediate';
-  const intensityRange = INTENSITY_RANGE[level] || INTENSITY_RANGE.intermediate;
-
-  // Adjust intensity range based on energy
-  let intensityMin = intensityRange.min;
-  let intensityMax = intensityRange.max;
-  let intensitySweet = intensityRange.sweet;
-  if (energy === 'low') {
-    intensityMax = Math.min(intensityMax, intensityRange.sweet);
-    intensitySweet = intensityRange.min + 1;
-  } else if (energy === 'high') {
-    intensityMin = Math.max(intensityMin, intensityRange.sweet - 1);
-    intensitySweet = intensityRange.max - 1;
-  }
-
-  // Get target muscles from focus areas
-  const targetMuscles = new Set();
-  focusAreas.forEach(area => {
-    (FOCUS_TO_MUSCLES[area] || []).forEach(m => targetMuscles.add(m));
-  });
-
-  // Get recently hit muscles (last 2 days) for deprioritization
-  const recentMuscles = new Set();
-  if (memory && memory.recentWorkouts) {
-    const twoDaysAgo = Date.now() - 2 * 86400000;
-    memory.recentWorkouts
-      .filter(w => new Date(w.date).getTime() > twoDaysAgo)
-      .forEach(w => {
-        (w.muscles || []).forEach(m => recentMuscles.add(m));
-      });
-  }
-
-  // Get neglected muscles for bonus scoring
-  const neglectedMuscles = new Set(memory?.neglectedMuscles || []);
-
-  // ---- FILTER EXERCISES ----
-  const allExercises = EXERCISES.filter(ex => {
-    // Must match allowed equipment
-    if (!allowedEquipment.includes(ex.equipment)) return false;
-    // Only strength and cardio for main workout
-    if (ex.category !== 'strength' && ex.category !== 'cardio') return false;
-    // Intensity must be in range
-    if (ex.intensity < intensityMin - 1 || ex.intensity > intensityMax + 1) return false;
-    return true;
-  });
-
-  // ---- SCORE EXERCISES ----
-  const scored = allExercises.map(ex => {
-    let score = 0;
-
-    // Target muscle match (highest weight)
-    if (targetMuscles.has(ex.muscle)) score += 20;
-    // Full body exercises get a bonus in full body mode
-    if (ex.muscle === 'Full Body' && focusAreas.includes('fullBody')) score += 15;
-
-    // Intensity alignment — closer to sweet spot = higher score
-    const intensityDist = Math.abs(ex.intensity - intensitySweet);
-    score += Math.max(0, 10 - intensityDist * 2);
-
-    // In-range intensity bonus
-    if (ex.intensity >= intensityMin && ex.intensity <= intensityMax) score += 5;
-
-    // Neglected muscle bonus
-    if (neglectedMuscles.has(ex.muscle)) score += 8;
-
-    // Recently-hit muscle penalty (mild — don't fully exclude)
-    if (recentMuscles.has(ex.muscle) && !focusAreas.some(a => FOCUS_TO_MUSCLES[a]?.includes(ex.muscle))) {
-      score -= 5;
-    }
-
-    // Cardio focus boosts cardio exercises
-    if (focusAreas.includes('cardio') && ex.category === 'cardio') score += 10;
-
-    // Random jitter for variety
-    score += Math.random() * 6;
-
-    return { exercise: ex, score };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
-
-  // ---- CALCULATE STRUCTURE ----
-  const totalSeconds = duration * 60;
-  const includeWarmup = duration >= 10;
-  const includeCooldown = duration >= 12;
-
-  const warmupTime = includeWarmup ? Math.min(90, totalSeconds * 0.12) : 0;
-  const cooldownTime = includeCooldown ? Math.min(120, totalSeconds * 0.12) : 0;
-  const mainTime = totalSeconds - warmupTime - cooldownTime;
-
-  // Work/rest timings by energy + level
-  const timings = getTimings(energy, level);
-  const exercisesNeeded = Math.max(3, Math.min(12, Math.round(mainTime / (timings.work + timings.rest))));
-
-  // ---- SELECT MAIN EXERCISES ----
-  const selected = [];
-  const usedMuscles = [];
-  const usedNames = new Set();
-
-  for (const item of scored) {
-    if (selected.length >= exercisesNeeded) break;
-    const ex = item.exercise;
-    if (usedNames.has(ex.name)) continue;
-
-    // Variety: don't stack same muscle back-to-back unless specifically requested
-    if (selected.length > 0 && !focusAreas.some(a => ['core', 'cardio'].includes(a))) {
-      const lastMuscle = selected[selected.length - 1].muscle;
-      if (lastMuscle === ex.muscle && scored.length > exercisesNeeded * 2) continue;
-    }
-
-    usedNames.add(ex.name);
-    usedMuscles.push(ex.muscle);
-    selected.push(ex);
-  }
-
-  // Fill if needed
-  for (const item of scored) {
-    if (selected.length >= exercisesNeeded) break;
-    if (!usedNames.has(item.exercise.name)) {
-      usedNames.add(item.exercise.name);
-      selected.push(item.exercise);
-    }
-  }
-
-  // ---- WARMUP EXERCISES ----
-  const warmupExercises = [];
-  if (includeWarmup) {
-    const warmups = EXERCISES.filter(ex =>
-      ex.category === 'warmup' && allowedEquipment.includes(ex.equipment)
-    );
-    // Pick 2-3 warmup exercises relevant to target muscles
-    const warmupScored = warmups.map(ex => {
-      let s = Math.random() * 3;
-      if (targetMuscles.has(ex.muscle)) s += 5;
-      return { exercise: ex, score: s };
-    }).sort((a, b) => b.score - a.score);
-    const warmupCount = duration >= 20 ? 3 : 2;
-    warmupScored.slice(0, warmupCount).forEach(w => warmupExercises.push(w.exercise));
-  }
-
-  // ---- COOLDOWN EXERCISES ----
-  const cooldownExercises = [];
-  if (includeCooldown) {
-    const cooldowns = EXERCISES.filter(ex =>
-      ex.category === 'cooldown' && allowedEquipment.includes(ex.equipment)
-    );
-    // Pick 2-3 cooldown exercises relevant to muscles worked
-    const workedMuscles = new Set(selected.map(e => e.muscle));
-    const cooldownScored = cooldowns.map(ex => {
-      let s = Math.random() * 3;
-      if (workedMuscles.has(ex.muscle)) s += 5;
-      return { exercise: ex, score: s };
-    }).sort((a, b) => b.score - a.score);
-    const cooldownCount = duration >= 20 ? 3 : 2;
-    cooldownScored.slice(0, cooldownCount).forEach(c => cooldownExercises.push(c.exercise));
-  }
-
-  // ---- BUILD WORKOUT OBJECT ----
-  const allWorkoutExercises = [
-    ...warmupExercises.map((ex, i) => ({
-      ...ex,
-      id: ex.id || `warmup_${i}`,
-      duration: 30,
-      rest: 5,
-      phase: 'warmup',
-    })),
-    ...selected.map((ex, i) => ({
-      ...ex,
-      id: ex.id || `main_${i}`,
-      duration: timings.work,
-      rest: i < selected.length - 1 ? timings.rest : (includeCooldown ? 10 : 0),
-      phase: 'main',
-    })),
-    ...cooldownExercises.map((ex, i) => ({
-      ...ex,
-      id: ex.id || `cooldown_${i}`,
-      duration: 30,
-      rest: i < cooldownExercises.length - 1 ? 5 : 0,
-      phase: 'cooldown',
-    })),
-  ];
-
-  const calPerMin = energy === 'high' ? 9 : energy === 'low' ? 4 : 6;
-  const levelMultiplier = level === 'advanced' ? 1.15 : level === 'beginner' ? 0.85 : 1;
+  const warmupCount = hydratedExercises.filter(e => e.phase === 'warmup').length;
+  const mainCount = hydratedExercises.filter(e => e.phase === 'main').length;
+  const cooldownCount = hydratedExercises.filter(e => e.phase === 'cooldown').length;
 
   return {
     id: `jt_${Date.now()}`,
-    name: buildWorkoutName(parsed, profile),
+    name: aiWorkout.name || buildWorkoutName(parsed, profile),
     type: 'just-talk',
-    description: buildWorkoutDescription(parsed, profile),
-    duration,
-    estimatedCalories: Math.round(duration * calPerMin * levelMultiplier),
-    exercises: allWorkoutExercises,
-    workDuration: timings.work,
-    restDuration: timings.rest,
+    description: aiWorkout.description || buildWorkoutDescription(parsed, profile),
+    duration: parsed.duration,
+    estimatedCalories: aiWorkout.estimatedCalories || Math.round(parsed.duration * 6),
+    exercises: hydratedExercises,
+    workDuration: aiWorkout.workDuration || 40,
+    restDuration: aiWorkout.restDuration || 15,
     parsed,
-    focus: focusAreas.join(', '),
-    energyLevel: energy,
+    focus: parsed.focusAreas.join(', '),
+    energyLevel: parsed.energy,
     fitnessLevel: level,
     equipmentUsed: allowedEquipment,
     structure: {
-      warmup: warmupExercises.length,
-      main: selected.length,
-      cooldown: cooldownExercises.length,
+      warmup: warmupCount,
+      main: mainCount,
+      cooldown: cooldownCount,
     },
   };
 }
 
-// ─── TIMINGS ──────────────────────────────────────────────────────
-
-function getTimings(energy, level) {
-  const base = {
-    low: { work: 30, rest: 20 },
-    medium: { work: 40, rest: 15 },
-    high: { work: 45, rest: 10 },
-  }[energy] || { work: 40, rest: 15 };
-
-  // Beginners get more rest, advanced get less
-  if (level === 'beginner') {
-    base.work = Math.max(25, base.work - 5);
-    base.rest = base.rest + 5;
-  } else if (level === 'advanced') {
-    base.work = base.work + 5;
-    base.rest = Math.max(5, base.rest - 5);
-  }
-
-  return base;
-}
-
-// ─── NAME & DESCRIPTION ──────────────────────────────────────────
+// ─── NAME & DESCRIPTION (fallback if AI doesn't provide) ────────
 
 function buildWorkoutName(parsed, profile) {
   const { duration, energy, focusAreas } = parsed;

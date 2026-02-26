@@ -111,12 +111,11 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# Uncomment to configure local storage buckets
-# [storage.buckets.images]
-# public = false
-# file_size_limit = "50MiB"
-# allowed_mime_types = ["image/png", "image/jpeg"]
-# objects_path = "./images"
+# Share card images bucket for social feed
+[storage.buckets.share-cards]
+public = true
+file_size_limit = "5MiB"
+allowed_mime_types = ["image/png", "image/jpeg"]
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
@@ -153,7 +152,7 @@ enabled = true
 # in emails.
 site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["https://127.0.0.1:3000", "sayfit://"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to the local API URL (http://127.0.0.1:<port>/auth/v1).
@@ -391,9 +390,14 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 enabled = true
 verify_jwt = true
 import_map = "./functions/coach/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/coach/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/coach/*.html" ]
+
+[functions.refresh-leaderboard]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/refresh-leaderboard/index.ts"
+
+[functions.push-notification]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/push-notification/index.ts"

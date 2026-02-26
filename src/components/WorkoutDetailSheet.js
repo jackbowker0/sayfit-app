@@ -10,9 +10,13 @@ import {
   View, Text, TouchableOpacity, ScrollView, Modal,
   Animated, Dimensions, TouchableWithoutFeedback, Platform, Alert,
 } from 'react-native';
+import {
+  Trophy, RefreshCw, Trash2, X,
+} from 'lucide-react-native';
 
 import { COACHES } from '../constants/coaches';
-import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { COACH_ICONS } from '../constants/icons';
+import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { formatTime } from '../utils/helpers';
@@ -23,6 +27,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgain, onDelete }) {
   const { coachId } = useWorkoutContext();
   const coach = COACHES[workout?.coach || coachId] || COACHES[coachId];
+  const CoachIcon = COACH_ICONS[workout?.coach || coachId] || COACH_ICONS[coachId];
   const { colors, isDark } = useTheme();
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
@@ -58,7 +63,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
     (ex.sets || []).some(s => s.isPR || s.pr)
   );
 
-  // Calculate total volume (sets × reps × weight)
+  // Calculate total volume (sets x reps x weight)
   const totalVolume = exercises.reduce((total, ex) => {
     return total + (ex.sets || []).reduce((setTotal, s) => {
       const reps = s.reps || 0;
@@ -77,12 +82,11 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
   const statBox = (value, label, color) => (
     <View style={{ flex: 1, alignItems: 'center' }}>
       <Text style={{
-        fontSize: 20, fontWeight: '800', color: color || colors.textPrimary,
-        fontVariant: ['tabular-nums'],
+        ...FONT.stat, fontSize: 20, color: color || colors.textPrimary,
       }}>
         {value}
       </Text>
-      <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 2, fontWeight: '600', letterSpacing: 0.5 }}>
+      <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
         {label}
       </Text>
     </View>
@@ -105,19 +109,20 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
       <Animated.View style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         maxHeight: SCREEN_HEIGHT * 0.85,
-        backgroundColor: colors.bgElevated,
+        backgroundColor: colors.bgSheet || colors.bgElevated,
         borderTopLeftRadius: 20, borderTopRightRadius: 20,
         paddingTop: 12,
         transform: [{ translateY: slideAnim }],
-        ...(isDark ? { borderTopWidth: 1, borderColor: colors.border } : {
-          shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.15, shadowRadius: 20, elevation: 20,
-        }),
+        borderTopWidth: 1,
+        borderColor: colors.glassBorder,
+        shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.25, shadowRadius: 20, elevation: 20,
       }}>
         {/* Handle */}
         <View style={{
           width: 36, height: 4, borderRadius: 2,
-          backgroundColor: colors.textDim, alignSelf: 'center', marginBottom: 16,
+          backgroundColor: colors.bgSheetHandle || colors.textDim,
+          alignSelf: 'center', marginBottom: 16,
         }} />
 
         <ScrollView
@@ -133,25 +138,26 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                 backgroundColor: coach.color + '15',
                 alignItems: 'center', justifyContent: 'center',
               }}>
-                <Text style={{ fontSize: 16 }}>{coach.emoji}</Text>
+                <CoachIcon size={18} color={coach.color} strokeWidth={2} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.3 }}>
+                <Text style={{ ...FONT.heading, color: colors.textPrimary }}>
                   {workout.name || 'Workout'}
                 </Text>
                 {hasPR && (
                   <View style={{
                     flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2,
                   }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.orange || '#FF6B35' }}>
-                      🏆 PR SET
+                    <Trophy size={12} color={colors.orange || '#FF6B35'} strokeWidth={2.5} />
+                    <Text style={{ ...FONT.label, fontSize: 11, color: colors.orange || '#FF6B35' }}>
+                      PR SET
                     </Text>
                   </View>
                 )}
               </View>
             </View>
-            <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>
-              {dateStr} · {timeStr}
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4 }}>
+              {dateStr} \u00B7 {timeStr}
             </Text>
             {muscles.length > 0 && (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
@@ -170,7 +176,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
           {/* Stats row */}
           <View style={{
             flexDirection: 'row', paddingVertical: 16,
-            borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border,
+            borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.glassBorder,
             marginBottom: 20,
           }}>
             {statBox(formatTime(workout.elapsed || 0), 'DURATION', coach.color)}
@@ -186,8 +192,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
           {exercises.length > 0 ? (
             <>
               <Text style={{
-                fontSize: 11, fontWeight: '600', color: colors.textMuted,
-                letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12,
+                ...FONT.label, color: colors.textMuted, marginBottom: 12,
               }}>
                 EXERCISES ({exercises.length})
               </Text>
@@ -201,7 +206,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                   <View key={ex.id || i} style={{
                     marginBottom: 16, paddingBottom: 16,
                     borderBottomWidth: i < exercises.length - 1 ? 1 : 0,
-                    borderBottomColor: colors.border,
+                    borderBottomColor: colors.glassBorder,
                   }}>
                     {/* Exercise name */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -210,19 +215,22 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                         backgroundColor: colors.bgSubtle,
                         alignItems: 'center', justifyContent: 'center', marginRight: 10,
                       }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+                        <Text style={{ ...FONT.label, fontSize: 11, color: colors.textMuted }}>
                           {i + 1}
                         </Text>
                       </View>
                       <Text numberOfLines={1} style={{
-                        flex: 1, fontSize: 15, fontWeight: '600', color: colors.textPrimary,
+                        flex: 1, ...FONT.subhead, fontSize: 15, color: colors.textPrimary,
                       }}>
                         {ex.name || ex.exercise || 'Exercise'}
                       </Text>
                       {exercisePR && (
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.orange || '#FF6B35' }}>
-                          🏆 PR
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                          <Trophy size={12} color={colors.orange || '#FF6B35'} strokeWidth={2.5} />
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.orange || '#FF6B35' }}>
+                            PR
+                          </Text>
+                        </View>
                       )}
                     </View>
 
@@ -231,13 +239,13 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                       <View style={{ marginLeft: 34 }}>
                         {/* Table header */}
                         <View style={{ flexDirection: 'row', marginBottom: 6 }}>
-                          <Text style={{ width: 40, fontSize: 10, fontWeight: '600', color: colors.textDim }}>SET</Text>
+                          <Text style={{ width: 40, ...FONT.label, fontSize: 10, color: colors.textDim }}>SET</Text>
                           {hasWeight && (
-                            <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: colors.textDim }}>WEIGHT</Text>
+                            <Text style={{ flex: 1, ...FONT.label, fontSize: 10, color: colors.textDim }}>WEIGHT</Text>
                           )}
-                          <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: colors.textDim }}>REPS</Text>
+                          <Text style={{ flex: 1, ...FONT.label, fontSize: 10, color: colors.textDim }}>REPS</Text>
                           {sets.some(s => s.time) && (
-                            <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: colors.textDim }}>TIME</Text>
+                            <Text style={{ flex: 1, ...FONT.label, fontSize: 10, color: colors.textDim }}>TIME</Text>
                           )}
                         </View>
                         {/* Set rows */}
@@ -270,14 +278,14 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                                 color: colors.textSecondary,
                                 fontVariant: ['tabular-nums'],
                               }}>
-                                {s.reps || '—'}
+                                {s.reps || '\u2014'}
                               </Text>
                               {sets.some(ss => ss.time) && (
                                 <Text style={{
                                   flex: 1, fontSize: 13, color: colors.textSecondary,
                                   fontVariant: ['tabular-nums'],
                                 }}>
-                                  {s.time ? formatTime(s.time) : '—'}
+                                  {s.time ? formatTime(s.time) : '\u2014'}
                                 </Text>
                               )}
                             </View>
@@ -294,7 +302,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                         )}
                         {ex.reps && (
                           <Text style={{ fontSize: 13, color: colors.textSecondary }}>
-                            {ex.sets_count || 1} × {ex.reps} reps
+                            {ex.sets_count || 1} \u00D7 {ex.reps} reps
                             {ex.weight ? ` @ ${ex.weight} lbs` : ''}
                           </Text>
                         )}
@@ -313,7 +321,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
             // No exercise detail available
             <View style={{
               alignItems: 'center', paddingVertical: 24,
-              borderTopWidth: 1, borderTopColor: colors.border,
+              borderTopWidth: 1, borderTopColor: colors.glassBorder,
             }}>
               <Text style={{ fontSize: 14, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' }}>
                 {workout.exerciseCount
@@ -334,6 +342,13 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                 style={{
                   flex: 1, paddingVertical: 14, borderRadius: RADIUS.lg,
                   backgroundColor: coach.color, alignItems: 'center',
+                  flexDirection: 'row', justifyContent: 'center', gap: 6,
+                  ...(isDark ? {
+                    shadowColor: coach.color,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: GLOW.md,
+                  } : {}),
                 }}
                 onPress={() => {
                   haptics.medium();
@@ -344,8 +359,9 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                 accessibilityRole="button"
                 accessibilityLabel="Do this workout again"
               >
+                <RefreshCw size={15} color={getTextOnColor(coach.color)} strokeWidth={2.5} />
                 <Text style={{ fontSize: 15, fontWeight: '700', color: getTextOnColor(coach.color) }}>
-                  Do Again 🔁
+                  Do Again
                 </Text>
               </TouchableOpacity>
             )}
@@ -355,6 +371,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                   paddingVertical: 14, paddingHorizontal: 16,
                   borderRadius: RADIUS.lg, backgroundColor: colors.red + '10',
                   alignItems: 'center', borderWidth: 1, borderColor: colors.red + '25',
+                  flexDirection: 'row', justifyContent: 'center', gap: 5,
                 }}
                 onPress={() => {
                   Alert.alert('Delete Workout', 'Are you sure you want to delete this workout? This cannot be undone.', [
@@ -366,6 +383,7 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
                 accessibilityRole="button"
                 accessibilityLabel="Delete this workout"
               >
+                <Trash2 size={14} color={colors.red} strokeWidth={2} />
                 <Text style={{ fontSize: 14, fontWeight: '600', color: colors.red }}>Delete</Text>
               </TouchableOpacity>
             )}
@@ -373,14 +391,16 @@ export default function WorkoutDetailSheet({ workout, visible, onClose, onDoAgai
               style={{
                 flex: onDoAgain && exercises.length > 0 ? 0 : 1,
                 paddingVertical: 14, paddingHorizontal: 20,
-                borderRadius: RADIUS.lg, backgroundColor: colors.bgSubtle,
-                alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+                borderRadius: RADIUS.lg, backgroundColor: colors.glassBg,
+                alignItems: 'center', borderWidth: 1, borderColor: colors.glassBorder,
+                flexDirection: 'row', justifyContent: 'center', gap: 5,
               }}
               onPress={handleClose}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="Close workout details"
             >
+              <X size={15} color={colors.textSecondary} strokeWidth={2} />
               <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary }}>
                 Close
               </Text>

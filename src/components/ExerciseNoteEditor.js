@@ -21,9 +21,11 @@ import {
   View, Text, TextInput, TouchableOpacity, Modal,
   Animated, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { X, Trash2, Info, ClipboardList } from 'lucide-react-native';
 
 import { getExerciseNote, saveExerciseNote, deleteExerciseNote } from '../services/exerciseNotes';
-import { RADIUS, SPACING } from '../constants/theme';
+import { getMuscleIcon } from '../constants/icons';
+import { RADIUS, SPACING, FONT, GLOW } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import * as haptics from '../services/haptics';
 
@@ -31,7 +33,7 @@ export default function ExerciseNoteEditor({
   visible,
   exerciseId,
   exerciseName,
-  exerciseIcon = '💪',
+  exerciseIcon,
   coachColor = '#FF6B35',
   onClose,
   onSave,
@@ -44,7 +46,10 @@ export default function ExerciseNoteEditor({
   const slideAnim = useRef(new Animated.Value(400)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
 
-  // ─── LOAD EXISTING NOTE ───────────────────────────────────────
+  // Use ClipboardList as default icon
+  const NoteIcon = ClipboardList;
+
+  // ---- LOAD EXISTING NOTE ----
 
   useEffect(() => {
     if (visible && exerciseId) {
@@ -64,7 +69,7 @@ export default function ExerciseNoteEditor({
     }
   }, [visible, exerciseId]);
 
-  // ─── ANIMATIONS ───────────────────────────────────────────────
+  // ---- ANIMATIONS ----
 
   useEffect(() => {
     if (visible) {
@@ -80,7 +85,7 @@ export default function ExerciseNoteEditor({
     }
   }, [visible]);
 
-  // ─── SAVE ─────────────────────────────────────────────────────
+  // ---- SAVE ----
 
   const handleSave = useCallback(async () => {
     if (!notes.trim() && !weight.trim()) return;
@@ -95,7 +100,7 @@ export default function ExerciseNoteEditor({
     onClose();
   }, [exerciseId, notes, weight, onSave, onClose]);
 
-  // ─── DELETE ───────────────────────────────────────────────────
+  // ---- DELETE ----
 
   const handleDelete = useCallback(async () => {
     haptics.warning();
@@ -107,7 +112,7 @@ export default function ExerciseNoteEditor({
     onClose();
   }, [exerciseId, onSave, onClose]);
 
-  // ─── QUICK TEMPLATES ──────────────────────────────────────────
+  // ---- QUICK TEMPLATES ----
 
   const quickTags = [
     'Seat #', 'Handle position', 'Angle:', 'Grip:', 'Form cue:',
@@ -120,7 +125,7 @@ export default function ExerciseNoteEditor({
     setNotes(prefix + tag + ' ');
   };
 
-  // ─── RENDER ───────────────────────────────────────────────────
+  // ---- RENDER ----
 
   if (!visible) return null;
 
@@ -146,35 +151,52 @@ export default function ExerciseNoteEditor({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Animated.View style={{
-          backgroundColor: isDark ? '#0d1117' : colors.bgCard,
+          backgroundColor: colors.bgSheet || colors.bgElevated,
           borderTopLeftRadius: 24, borderTopRightRadius: 24,
           paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
           paddingHorizontal: SPACING.lg,
           transform: [{ translateY: slideAnim }],
+          borderTopWidth: 1,
+          borderColor: colors.glassBorder,
           shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20, shadowOffset: { width: 0, height: -5 },
           elevation: 20,
         }}>
           {/* Handle bar */}
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.textDim + '40', alignSelf: 'center', marginBottom: 16 }} />
+          <View style={{
+            width: 36, height: 4, borderRadius: 2,
+            backgroundColor: colors.bgSheetHandle || (colors.textDim + '40'),
+            alignSelf: 'center', marginBottom: 16,
+          }} />
 
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             <View style={{
               width: 44, height: 44, borderRadius: 12,
               backgroundColor: coachColor + '15', justifyContent: 'center', alignItems: 'center', marginRight: 12,
+              ...(isDark ? {
+                shadowColor: coachColor,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.15,
+                shadowRadius: GLOW.sm,
+              } : {}),
             }}>
-              <Text style={{ fontSize: 22 }}>{exerciseIcon}</Text>
+              <NoteIcon size={22} color={coachColor} strokeWidth={1.8} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.textPrimary }}>{exerciseName}</Text>
-              <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }}>My Settings</Text>
+              <Text style={{ ...FONT.subhead, fontSize: 18, color: colors.textPrimary }}>{exerciseName}</Text>
+              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>My Settings</Text>
             </View>
             <TouchableOpacity
               onPress={onClose}
-              style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgSubtle, justifyContent: 'center', alignItems: 'center' }}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: colors.glassBg,
+                borderWidth: 1, borderColor: colors.glassBorder,
+                justifyContent: 'center', alignItems: 'center',
+              }}
               accessibilityLabel="Close"
             >
-              <Text style={{ fontSize: 16, color: colors.textMuted }}>✕</Text>
+              <X size={16} color={colors.textMuted} strokeWidth={2} />
             </TouchableOpacity>
           </View>
 
@@ -184,22 +206,24 @@ export default function ExerciseNoteEditor({
               flexDirection: 'row', alignItems: 'center', marginBottom: 16,
               paddingHorizontal: 12, paddingVertical: 8, borderRadius: RADIUS.sm,
               backgroundColor: coachColor + '08', borderWidth: 1, borderColor: coachColor + '15',
+              gap: 6,
             }}>
-              <Text style={{ fontSize: 12, color: coachColor }}>
-                💡 Last used: {new Date(existingNote.lastUsed).toLocaleDateString()}
-                {existingNote.weight ? ` · Weight: ${existingNote.weight}` : ''}
+              <Info size={13} color={coachColor} strokeWidth={2} />
+              <Text style={{ ...FONT.caption, color: coachColor }}>
+                Last used: {new Date(existingNote.lastUsed).toLocaleDateString()}
+                {existingNote.weight ? ` \u00B7 Weight: ${existingNote.weight}` : ''}
               </Text>
             </View>
           )}
 
           {/* Weight field */}
-          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, letterSpacing: 0.5, marginBottom: 6 }}>
+          <Text style={{ ...FONT.label, fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
             WEIGHT / RESISTANCE
           </Text>
           <TextInput
             style={{
-              backgroundColor: colors.bgSubtle, borderRadius: RADIUS.md,
-              borderWidth: 1, borderColor: colors.border,
+              backgroundColor: colors.glassBg, borderRadius: RADIUS.md,
+              borderWidth: 1, borderColor: colors.glassBorder,
               paddingHorizontal: 14, paddingVertical: 12,
               color: colors.textPrimary, fontSize: 16, marginBottom: 16,
               minHeight: 44,
@@ -214,15 +238,15 @@ export default function ExerciseNoteEditor({
           {/* Weight history */}
           {existingNote?.history?.length > 0 && (
             <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 11, color: colors.textDim, marginBottom: 6 }}>WEIGHT HISTORY</Text>
+              <Text style={{ ...FONT.label, fontSize: 11, color: colors.textDim, marginBottom: 6 }}>WEIGHT HISTORY</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {existingNote.history.slice(0, 5).map((h, i) => (
                   <View key={i} style={{
                     paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
-                    backgroundColor: colors.bgSubtle, marginRight: 6,
-                    borderWidth: 1, borderColor: colors.border,
+                    backgroundColor: colors.glassBg, marginRight: 6,
+                    borderWidth: 1, borderColor: colors.glassBorder,
                   }}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>{h.weight}</Text>
+                    <Text style={{ ...FONT.caption, fontWeight: '600', color: colors.textSecondary }}>{h.weight}</Text>
                     <Text style={{ fontSize: 9, color: colors.textDim, marginTop: 1 }}>
                       {new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </Text>
@@ -233,15 +257,15 @@ export default function ExerciseNoteEditor({
           )}
 
           {/* Notes field */}
-          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, letterSpacing: 0.5, marginBottom: 6 }}>
+          <Text style={{ ...FONT.label, fontSize: 12, color: colors.textMuted, marginBottom: 6 }}>
             MACHINE SETTINGS & NOTES
           </Text>
           <TextInput
             style={{
-              backgroundColor: colors.bgSubtle, borderRadius: RADIUS.md,
-              borderWidth: 1, borderColor: colors.border,
+              backgroundColor: colors.glassBg, borderRadius: RADIUS.md,
+              borderWidth: 1, borderColor: colors.glassBorder,
               paddingHorizontal: 14, paddingVertical: 12,
-              color: colors.textPrimary, fontSize: 15, lineHeight: 22,
+              color: colors.textPrimary, ...FONT.body, fontSize: 15,
               minHeight: 80, textAlignVertical: 'top', marginBottom: 10,
             }}
             placeholder="Seat position, handle height, angle, personal form cues..."
@@ -260,12 +284,12 @@ export default function ExerciseNoteEditor({
                 key={tag}
                 style={{
                   paddingHorizontal: 12, paddingVertical: 6,
-                  borderRadius: 14, backgroundColor: colors.bgSubtle,
-                  borderWidth: 1, borderColor: colors.border, marginRight: 6,
+                  borderRadius: 14, backgroundColor: colors.glassBg,
+                  borderWidth: 1, borderColor: colors.glassBorder, marginRight: 6,
                 }}
                 onPress={() => handleQuickTag(tag)}
               >
-                <Text style={{ fontSize: 12, color: colors.textSecondary }}>{tag}</Text>
+                <Text style={{ ...FONT.caption, color: colors.textSecondary }}>{tag}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -278,12 +302,12 @@ export default function ExerciseNoteEditor({
                   paddingHorizontal: 16, paddingVertical: 14,
                   borderRadius: RADIUS.md, backgroundColor: colors.red + '10',
                   borderWidth: 1, borderColor: colors.red + '20', minHeight: 48,
-                  justifyContent: 'center',
+                  justifyContent: 'center', alignItems: 'center',
                 }}
                 onPress={handleDelete}
                 accessibilityLabel="Delete exercise notes"
               >
-                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.red }}>🗑️</Text>
+                <Trash2 size={16} color={colors.red} strokeWidth={2} />
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -292,13 +316,19 @@ export default function ExerciseNoteEditor({
                 backgroundColor: hasChanges ? coachColor : colors.bgSubtle,
                 alignItems: 'center', minHeight: 48, justifyContent: 'center',
                 opacity: hasChanges ? 1 : 0.5,
+                ...(hasChanges && isDark ? {
+                  shadowColor: coachColor,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: GLOW.md,
+                } : {}),
               }}
               onPress={handleSave}
               disabled={!hasChanges}
               accessibilityLabel="Save exercise notes"
             >
               <Text style={{
-                fontSize: 16, fontWeight: '700',
+                ...FONT.subhead, fontSize: 16,
                 color: hasChanges ? '#fff' : colors.textDim,
               }}>
                 {hasExisting ? 'Update Settings' : 'Save Settings'}

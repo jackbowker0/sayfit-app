@@ -1,5 +1,5 @@
 // ============================================================
-// SETTINGS SCREEN — With workout days editor
+// SETTINGS SCREEN — Premium dark UI redesign with glass-morphism
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -8,21 +8,33 @@ import {
   TextInput, Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Sun, Moon, Smartphone, ChevronLeft, User, Dumbbell, Calendar, Timer, Scale } from 'lucide-react-native';
+import FadeInView from '../components/FadeInView';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
 import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { FONT, GLOW } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getUserProfile, saveUserProfile, resetOnboarding, GOAL_OPTIONS, EQUIPMENT_OPTIONS, FITNESS_LEVELS, DAY_OPTIONS } from '../services/userProfile';
 import { clearWorkoutHistory } from '../services/storage';
 import { clearAchievements, getAchievementStats } from '../services/achievements';
 import * as haptics from '../services/haptics';
+import { COACH_ICONS } from '../constants/icons';
+import GlassCard from '../components/GlassCard';
 
 const REST_OPTIONS = [60, 90, 120, 180];
+
+const THEME_ICON_MAP = {
+  light: Sun,
+  dark: Moon,
+  system: Smartphone,
+};
+
 const THEME_OPTIONS = [
-  { id: 'light', label: '☀️ Light' },
-  { id: 'dark', label: '🌙 Dark' },
-  { id: 'system', label: '📱 System' },
+  { id: 'light', label: 'Light' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'system', label: 'System' },
 ];
 
 export default function SettingsScreen({ navigation }) {
@@ -134,10 +146,13 @@ export default function SettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={ds.container}>
       <View style={ds.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Go back">
-          <Text style={[ds.backBtn, { color: coach.color }]}>← Home</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Go back"
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+        >
+          <ChevronLeft size={20} color={coach.color} />
+          <Text style={[ds.backBtn, { color: coach.color }]}>Home</Text>
         </TouchableOpacity>
-        <Text style={ds.headerTitle} accessibilityRole="header">Settings</Text>
+        <Text style={[ds.headerTitle, FONT.heading]} accessibilityRole="header">Settings</Text>
         <TouchableOpacity onPress={handleSave} activeOpacity={0.7}
           style={[ds.saveBtn, { backgroundColor: hasChanges ? coach.color : colors.bgSubtle }]}
           accessibilityRole="button" accessibilityLabel={hasChanges ? "Save changes" : "No changes"}
@@ -149,188 +164,229 @@ export default function SettingsScreen({ navigation }) {
       <ScrollView contentContainerStyle={ds.scroll} showsVerticalScrollIndicator={false}>
 
         {/* APPEARANCE */}
-        <Text style={ds.sectionTitle}>Appearance</Text>
-        <View style={ds.card}>
-          <Text style={ds.fieldLabel}>Theme</Text>
-          <View style={ds.toggleRow}>
-            {THEME_OPTIONS.map(opt => (
-              <TouchableOpacity key={opt.id} style={[ds.toggleBtn, themeMode === opt.id && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
-                onPress={() => { haptics.tick(); setThemeMode(opt.id); }} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: themeMode === opt.id }}
-              >
-                <Text style={[ds.toggleText, themeMode === opt.id && { color: coach.color }]}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        <FadeInView delay={50}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Appearance</Text>
+          <GlassCard>
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary }]}>Theme</Text>
+            <View style={ds.toggleRow}>
+              {THEME_OPTIONS.map(opt => {
+                const ThemeIcon = THEME_ICON_MAP[opt.id];
+                const isSelected = themeMode === opt.id;
+                return (
+                  <TouchableOpacity key={opt.id} style={[ds.toggleBtn, isSelected && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                    onPress={() => { haptics.tick(); setThemeMode(opt.id); }} activeOpacity={0.7}
+                    accessibilityRole="button" accessibilityState={{ selected: isSelected }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <ThemeIcon size={16} color={isSelected ? coach.color : colors.textSecondary} />
+                      <Text style={[ds.toggleText, isSelected && { color: coach.color }]}>{opt.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </GlassCard>
+        </FadeInView>
 
         {/* COACH */}
-        <Text style={ds.sectionTitle}>Your Coach</Text>
-        <View style={ds.coachRow}>
-          {Object.entries(COACHES).map(([id, c]) => (
-            <TouchableOpacity key={id} style={[ds.coachOption, { borderColor: coachId === id ? c.color : colors.border, backgroundColor: coachId === id ? c.color + '15' : colors.bgCard }]}
-              onPress={() => handleCoachSelect(id)} activeOpacity={0.7}
-              accessibilityRole="button" accessibilityLabel={`Coach ${c.name}: ${c.description}`} accessibilityState={{ selected: coachId === id }}
-            >
-              <Text style={{ fontSize: 28 }}>{c.emoji}</Text>
-              <Text style={[ds.coachName, coachId === id && { color: c.color }]}>{c.name}</Text>
-              <Text style={ds.coachVibe}>{id === 'drill' ? 'Tough love' : id === 'hype' ? 'Hype energy' : 'Calm flow'}</Text>
-              {coachId === id && <View style={[ds.activeDot, { backgroundColor: c.color }]} />}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* PROFILE */}
-        <Text style={ds.sectionTitle}>Profile</Text>
-        <View style={ds.card}>
-          <Text style={ds.fieldLabel}>Name</Text>
-          <TextInput style={[ds.textInput, { borderColor: coach.color + '30' }]} value={name}
-            onChangeText={(t) => { setName(t); markChanged(); }} placeholder="Your name"
-            placeholderTextColor={colors.textDim} selectionColor={coach.color} accessibilityLabel="Your name"
-            returnKeyType="done"
-          />
-          <Text style={[ds.fieldLabel, { marginTop: SPACING.lg }]}>Fitness Level</Text>
-          <View style={ds.chipRow}>
-            {FITNESS_LEVELS.map(level => (
-              <TouchableOpacity key={level.id} style={[ds.chip, fitnessLevel === level.id && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
-                onPress={() => { haptics.tick(); setFitnessLevel(level.id); markChanged(); }} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: fitnessLevel === level.id }}
-              >
-                <Text style={ds.chipEmoji}>{level.emoji}</Text>
-                <Text style={[ds.chipText, fitnessLevel === level.id && { color: coach.color }]}>{level.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* GOALS */}
-        <Text style={ds.sectionTitle}>Goals</Text>
-        <View style={ds.card}>
-          <View style={ds.chipWrap}>
-            {GOAL_OPTIONS.map(goal => (
-              <TouchableOpacity key={goal.id} style={[ds.chipWrapItem, goals.includes(goal.id) && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
-                onPress={() => toggleGoal(goal.id)} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: goals.includes(goal.id) }}
-              >
-                <Text style={ds.chipEmoji}>{goal.emoji}</Text>
-                <Text style={[ds.chipText, goals.includes(goal.id) && { color: coach.color }]}>{goal.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* EQUIPMENT */}
-        <Text style={ds.sectionTitle}>Equipment</Text>
-        <View style={ds.card}>
-          <View style={ds.chipWrap}>
-            {EQUIPMENT_OPTIONS.map(eq => (
-              <TouchableOpacity key={eq.id} style={[ds.chipWrapItem, equipment.includes(eq.id) && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
-                onPress={() => toggleEquipment(eq.id)} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: equipment.includes(eq.id) }}
-              >
-                <Text style={ds.chipEmoji}>{eq.emoji}</Text>
-                <Text style={[ds.chipText, equipment.includes(eq.id) && { color: coach.color }]}>{eq.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* WORKOUT SCHEDULE */}
-        <Text style={ds.sectionTitle}>Workout Schedule</Text>
-        <View style={ds.card}>
-          <Text style={ds.fieldLabel}>Training Days</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-            {DAY_OPTIONS.map(day => {
-              const selected = workoutDays.includes(day.id);
+        <FadeInView delay={100}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Your Coach</Text>
+          <View style={ds.coachRow}>
+            {Object.entries(COACHES).map(([id, c]) => {
+              const CoachIcon = COACH_ICONS[c.iconName];
+              const isSelected = coachId === id;
               return (
-                <TouchableOpacity key={day.id} style={{
-                  width: 40, height: 40, borderRadius: 20,
-                  backgroundColor: selected ? coach.color : colors.bgInput,
-                  borderWidth: 1.5, borderColor: selected ? coach.color : colors.border,
-                  alignItems: 'center', justifyContent: 'center',
-                }} onPress={() => toggleDay(day.id)} activeOpacity={0.7}
-                  accessibilityRole="button" accessibilityLabel={`${day.label}${selected ? ', selected' : ''}`}
-                  accessibilityState={{ selected }}
+                <TouchableOpacity key={id}
+                  style={[
+                    ds.coachOption,
+                    {
+                      borderColor: isSelected ? c.color : colors.glassBorder,
+                      backgroundColor: isSelected ? c.color + '15' : colors.glassBg,
+                    },
+                    isSelected && {
+                      shadowColor: c.color,
+                      shadowOffset: { width: 0, height: 0 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: GLOW.md,
+                      elevation: 4,
+                    },
+                  ]}
+                  onPress={() => handleCoachSelect(id)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityLabel={`Coach ${c.name}: ${c.description}`} accessibilityState={{ selected: isSelected }}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: selected ? getTextOnColor(coach.color) : colors.textMuted }}>{day.short}</Text>
+                  <CoachIcon size={28} color={c.color} />
+                  <Text style={[ds.coachName, isSelected && { color: c.color }]}>{c.name}</Text>
+                  <Text style={ds.coachVibe}>{id === 'drill' ? 'Tough love' : id === 'hype' ? 'Hype energy' : 'Calm flow'}</Text>
+                  {isSelected && <View style={[ds.activeDot, { backgroundColor: c.color }]} />}
                 </TouchableOpacity>
               );
             })}
           </View>
-          <Text style={ds.fieldHint}>
-            {workoutDays.length === 0 ? 'No schedule set — weekly goal used instead' : `${workoutDays.length} days/week · ${workoutDays.map(d => DAY_OPTIONS[d].label).join(', ')}`}
-          </Text>
-        </View>
+        </FadeInView>
+
+        {/* PROFILE */}
+        <FadeInView delay={150}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Profile</Text>
+          <GlassCard>
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary }]}>Name</Text>
+            <TextInput style={[ds.textInput, { borderColor: coach.color + '30' }]} value={name}
+              onChangeText={(t) => { setName(t); markChanged(); }} placeholder="Your name"
+              placeholderTextColor={colors.textDim} selectionColor={coach.color} accessibilityLabel="Your name"
+              returnKeyType="done"
+            />
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary, marginTop: SPACING.lg }]}>Fitness Level</Text>
+            <View style={ds.chipRow}>
+              {FITNESS_LEVELS.map(level => (
+                <TouchableOpacity key={level.id} style={[ds.chip, fitnessLevel === level.id && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                  onPress={() => { haptics.tick(); setFitnessLevel(level.id); markChanged(); }} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: fitnessLevel === level.id }}
+                >
+                  <Text style={ds.chipEmoji}>{level.emoji}</Text>
+                  <Text style={[ds.chipText, fitnessLevel === level.id && { color: coach.color }]}>{level.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </GlassCard>
+        </FadeInView>
+
+        {/* GOALS */}
+        <FadeInView delay={200}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Goals</Text>
+          <GlassCard>
+            <View style={ds.chipWrap}>
+              {GOAL_OPTIONS.map(goal => (
+                <TouchableOpacity key={goal.id} style={[ds.chipWrapItem, goals.includes(goal.id) && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                  onPress={() => toggleGoal(goal.id)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: goals.includes(goal.id) }}
+                >
+                  <Text style={ds.chipEmoji}>{goal.emoji}</Text>
+                  <Text style={[ds.chipText, goals.includes(goal.id) && { color: coach.color }]}>{goal.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </GlassCard>
+        </FadeInView>
+
+        {/* EQUIPMENT */}
+        <FadeInView delay={250}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Equipment</Text>
+          <GlassCard>
+            <View style={ds.chipWrap}>
+              {EQUIPMENT_OPTIONS.map(eq => (
+                <TouchableOpacity key={eq.id} style={[ds.chipWrapItem, equipment.includes(eq.id) && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                  onPress={() => toggleEquipment(eq.id)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: equipment.includes(eq.id) }}
+                >
+                  <Text style={ds.chipEmoji}>{eq.emoji}</Text>
+                  <Text style={[ds.chipText, equipment.includes(eq.id) && { color: coach.color }]}>{eq.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </GlassCard>
+        </FadeInView>
+
+        {/* WORKOUT SCHEDULE */}
+        <FadeInView delay={300}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Workout Schedule</Text>
+          <GlassCard>
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary }]}>Training Days</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+              {DAY_OPTIONS.map(day => {
+                const selected = workoutDays.includes(day.id);
+                return (
+                  <TouchableOpacity key={day.id} style={{
+                    width: 40, height: 40, borderRadius: 20,
+                    backgroundColor: selected ? coach.color : colors.glassBg,
+                    borderWidth: 1.5, borderColor: selected ? coach.color : colors.glassBorder,
+                    alignItems: 'center', justifyContent: 'center',
+                  }} onPress={() => toggleDay(day.id)} activeOpacity={0.7}
+                    accessibilityRole="button" accessibilityLabel={`${day.label}${selected ? ', selected' : ''}`}
+                    accessibilityState={{ selected }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: selected ? getTextOnColor(coach.color) : colors.textMuted }}>{day.short}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={ds.fieldHint}>
+              {workoutDays.length === 0 ? 'No schedule set \u2014 weekly goal used instead' : `${workoutDays.length} days/week \u00b7 ${workoutDays.map(d => DAY_OPTIONS[d].label).join(', ')}`}
+            </Text>
+          </GlassCard>
+        </FadeInView>
 
         {/* WORKOUT SETTINGS */}
-        <Text style={ds.sectionTitle}>Workout Settings</Text>
-        <View style={ds.card}>
-          {workoutDays.length === 0 && (
-            <>
-              <Text style={ds.fieldLabel}>Weekly Goal</Text>
-              <View style={ds.sliderRow}>
-                {[2, 3, 4, 5, 6, 7].map(n => (
-                  <TouchableOpacity key={n} style={[ds.sliderBtn, weeklyGoal === n && { backgroundColor: coach.color, borderColor: coach.color }]}
-                    onPress={() => { haptics.tick(); setWeeklyGoal(n); markChanged(); }} activeOpacity={0.7}
-                    accessibilityRole="button" accessibilityLabel={`${n} workouts per week`} accessibilityState={{ selected: weeklyGoal === n }}
-                  >
-                    <Text style={[ds.sliderBtnText, weeklyGoal === n && { color: getTextOnColor(coach.color), fontWeight: '800' }]}>{n}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={ds.fieldHint}>{weeklyGoal} workouts per week</Text>
-            </>
-          )}
+        <FadeInView delay={350}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Workout Settings</Text>
+          <GlassCard>
+            {workoutDays.length === 0 && (
+              <>
+                <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary }]}>Weekly Goal</Text>
+                <View style={ds.sliderRow}>
+                  {[2, 3, 4, 5, 6, 7].map(n => (
+                    <TouchableOpacity key={n} style={[ds.sliderBtn, weeklyGoal === n && { backgroundColor: coach.color, borderColor: coach.color }]}
+                      onPress={() => { haptics.tick(); setWeeklyGoal(n); markChanged(); }} activeOpacity={0.7}
+                      accessibilityRole="button" accessibilityLabel={`${n} workouts per week`} accessibilityState={{ selected: weeklyGoal === n }}
+                    >
+                      <Text style={[ds.sliderBtnText, weeklyGoal === n && { color: getTextOnColor(coach.color), fontWeight: '800' }]}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={ds.fieldHint}>{weeklyGoal} workouts per week</Text>
+              </>
+            )}
 
-          {workoutDays.length > 0 && (
-            <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: SPACING.md }}>
-              Weekly goal auto-set to {workoutDays.length} from your schedule
-            </Text>
-          )}
+            {workoutDays.length > 0 && (
+              <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: SPACING.md }}>
+                Weekly goal auto-set to {workoutDays.length} from your schedule
+              </Text>
+            )}
 
-          <Text style={[ds.fieldLabel, workoutDays.length === 0 && { marginTop: SPACING.lg }]}>Units</Text>
-          <View style={ds.toggleRow}>
-            {['lbs', 'kg'].map(u => (
-              <TouchableOpacity key={u} style={[ds.toggleBtn, units === u && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
-                onPress={() => { haptics.tick(); setUnits(u); markChanged(); }} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: units === u }}
-              >
-                <Text style={[ds.toggleText, units === u && { color: coach.color }]}>{u}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary }, workoutDays.length === 0 && { marginTop: SPACING.lg }]}>Units</Text>
+            <View style={ds.toggleRow}>
+              {['lbs', 'kg'].map(u => (
+                <TouchableOpacity key={u} style={[ds.toggleBtn, units === u && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                  onPress={() => { haptics.tick(); setUnits(u); markChanged(); }} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: units === u }}
+                >
+                  <Text style={[ds.toggleText, units === u && { color: coach.color }]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          <Text style={[ds.fieldLabel, { marginTop: SPACING.lg }]}>Default Rest Timer</Text>
-          <View style={ds.sliderRow}>
-            {REST_OPTIONS.map(sec => (
-              <TouchableOpacity key={sec} style={[ds.sliderBtn, restDuration === sec && { backgroundColor: coach.color, borderColor: coach.color }]}
-                onPress={() => { haptics.tick(); setRestDuration(sec); markChanged(); }} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityState={{ selected: restDuration === sec }}
-              >
-                <Text style={[ds.sliderBtnText, restDuration === sec && { color: getTextOnColor(coach.color), fontWeight: '800' }]}>{sec}s</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary, marginTop: SPACING.lg }]}>Default Rest Timer</Text>
+            <View style={ds.sliderRow}>
+              {REST_OPTIONS.map(sec => (
+                <TouchableOpacity key={sec} style={[ds.sliderBtn, restDuration === sec && { backgroundColor: coach.color, borderColor: coach.color }]}
+                  onPress={() => { haptics.tick(); setRestDuration(sec); markChanged(); }} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: restDuration === sec }}
+                >
+                  <Text style={[ds.sliderBtnText, restDuration === sec && { color: getTextOnColor(coach.color), fontWeight: '800' }]}>{sec}s</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </GlassCard>
+        </FadeInView>
 
         {/* DANGER ZONE */}
-        <Text style={[ds.sectionTitle, { color: colors.red }]}>Danger Zone</Text>
-        <View style={[ds.card, { borderColor: colors.red + '20' }]}>
-          <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleClearHistory} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Clear Workout History</Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Deletes all workouts, streaks, and stats</Text>
-          </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: SPACING.md }} />
-          <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleClearAchievements} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Clear Achievements</Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Resets all {achieveStats?.unlocked || 0} earned badges</Text>
-          </TouchableOpacity>
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: SPACING.md }} />
-          <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleResetOnboarding} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Reset Onboarding</Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Clears profile and restarts setup flow</Text>
-          </TouchableOpacity>
-        </View>
+        <FadeInView delay={400}>
+          <Text style={[ds.sectionTitle, FONT.label, { color: colors.red }]}>Danger Zone</Text>
+          <GlassCard accentColor={colors.red}>
+            <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleClearHistory} activeOpacity={0.7} accessibilityRole="button">
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Clear Workout History</Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Deletes all workouts, streaks, and stats</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: colors.glassBorder, marginVertical: SPACING.md }} />
+            <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleClearAchievements} activeOpacity={0.7} accessibilityRole="button">
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Clear Achievements</Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Resets all {achieveStats?.unlocked || 0} earned badges</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: colors.glassBorder, marginVertical: SPACING.md }} />
+            <TouchableOpacity style={{ paddingVertical: SPACING.sm, minHeight: 48, justifyContent: 'center' }} onPress={handleResetOnboarding} activeOpacity={0.7} accessibilityRole="button">
+              <Text style={{ fontSize: 15, fontWeight: '600', color: colors.red }}>Reset Onboarding</Text>
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Clears profile and restarts setup flow</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        </FadeInView>
 
         <Text style={{ textAlign: 'center', color: colors.textMuted, fontSize: 12, marginTop: SPACING.xl }}>SayFit v1.0.0</Text>
       </ScrollView>
@@ -343,31 +399,30 @@ function dynamicStyles(colors, isDark, coach) {
     container: { flex: 1, backgroundColor: colors.bg },
     scroll: { padding: SPACING.lg, paddingBottom: 80 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md },
-    backBtn: { fontSize: 16, fontWeight: '600' },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: colors.textPrimary },
+    backBtn: { fontSize: 16, fontWeight: '600', marginLeft: 4 },
+    headerTitle: { color: colors.textPrimary },
     saveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: RADIUS.sm },
     saveBtnText: { fontSize: 14, fontWeight: '700' },
-    sectionTitle: { fontSize: 12, fontWeight: '600', color: colors.textMuted, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: SPACING.md, marginTop: SPACING.lg },
-    card: { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.xl, padding: SPACING.lg, ...(isDark ? {} : { shadowColor: 'rgba(0,0,0,0.06)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 2 }) },
+    sectionTitle: { color: colors.textMuted, marginBottom: SPACING.md, marginTop: SPACING.lg },
     coachRow: { flexDirection: 'row', gap: 10 },
     coachOption: { flex: 1, alignItems: 'center', padding: SPACING.md, borderRadius: RADIUS.lg, borderWidth: 1.5 },
     coachName: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginTop: 8 },
     coachVibe: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
     activeDot: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
-    fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 8 },
+    fieldLabel: { marginBottom: 8 },
     fieldHint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
-    textInput: { backgroundColor: colors.bgInput, borderWidth: 1, borderRadius: RADIUS.md, padding: 14, fontSize: 16, color: colors.textPrimary },
+    textInput: { backgroundColor: colors.glassBg, borderWidth: 1, borderRadius: RADIUS.md, padding: 14, fontSize: 16, color: colors.textPrimary },
     chipRow: { flexDirection: 'row', gap: 8 },
-    chip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgInput },
+    chip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glassBg },
     chipEmoji: { fontSize: 14, marginRight: 4 },
     chipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    chipWrapItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgInput },
+    chipWrapItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glassBg },
     sliderRow: { flexDirection: 'row', gap: 8 },
-    sliderBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgInput },
+    sliderBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glassBg },
     sliderBtnText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
     toggleRow: { flexDirection: 'row', gap: 8 },
-    toggleBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgInput },
+    toggleBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: RADIUS.md, borderWidth: 1, borderColor: colors.glassBorder, backgroundColor: colors.glassBg },
     toggleText: { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
   });
 }

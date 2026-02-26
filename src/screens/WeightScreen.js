@@ -1,5 +1,5 @@
 // ============================================================
-// WEIGHT SCREEN — Body weight tracker (themed + achievements)
+// WEIGHT SCREEN — Premium dark body weight tracker
 // ============================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,14 +10,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import FadeInView from '../components/FadeInView';
+import {
+  Scale, ChevronLeft, TrendingUp, TrendingDown, ArrowDown, ArrowUp,
+} from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
-import { SPACING, RADIUS, getTextOnColor } from '../constants/theme';
+import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getUserProfile } from '../services/userProfile';
 import { checkActionAchievement } from '../services/achievements';
 import * as haptics from '../services/haptics';
+import GlassCard from '../components/GlassCard';
 
 const WEIGHT_KEY = 'sayfit_weight_log';
 
@@ -77,33 +82,31 @@ export default function WeightScreen({ navigation }) {
   const min = filtered.length > 0 ? Math.min(...filtered.map(e => e.weight)) : 0;
   const max = filtered.length > 0 ? Math.max(...filtered.map(e => e.weight)) : 0;
 
-  const card = (extra) => ({
-    backgroundColor: colors.bgCard, borderRadius: RADIUS.lg,
-    borderWidth: 1, borderColor: colors.border, padding: SPACING.md,
-    marginBottom: SPACING.md,
-    ...(isDark ? {} : { shadowColor: 'rgba(0,0,0,0.06)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 8, elevation: 2 }),
-    ...extra,
-  });
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor={coach.color} />}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+
+        {/* Header */}
+        <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <View>
-            <Text style={{ fontSize: 28, fontWeight: '800', color: colors.textPrimary, letterSpacing: -0.5 }}>Weight</Text>
-            <Text style={{ fontSize: 14, color: colors.textMuted, marginTop: 4 }}>Track your body weight</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Scale size={24} color={coach.color} strokeWidth={2} />
+              <Text style={{ ...FONT.title, color: colors.textPrimary }}>Weight</Text>
+            </View>
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4, marginLeft: 34 }}>Track your body weight</Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={{ fontSize: 14, color: coach.color, fontWeight: '600' }}>← Back</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <ChevronLeft size={16} color={coach.color} strokeWidth={2.5} />
+            <Text style={{ ...FONT.caption, color: coach.color, fontWeight: '600' }}>Back</Text>
           </TouchableOpacity>
-        </View>
+        </FadeInView>
 
         {/* Quick Log */}
-        <View style={card()}>
+        <GlassCard fadeDelay={100} accentColor={coach.color}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <TextInput
               style={{
-                flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.border,
+                flex: 1, backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.glassBorder,
                 borderRadius: RADIUS.md, padding: 14, fontSize: 18, color: colors.textPrimary,
                 textAlign: 'center', fontWeight: '700', fontVariant: ['tabular-nums'],
               }}
@@ -116,60 +119,80 @@ export default function WeightScreen({ navigation }) {
               onSubmitEditing={handleLog}
             />
             <TouchableOpacity
-              style={{ backgroundColor: coach.color, paddingHorizontal: 20, paddingVertical: 14, borderRadius: RADIUS.md }}
+              style={{
+                backgroundColor: coach.color, paddingHorizontal: 20, paddingVertical: 14,
+                borderRadius: RADIUS.md,
+                ...(isDark ? {
+                  shadowColor: coach.color,
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: GLOW.md,
+                } : {}),
+              }}
               onPress={handleLog}
             >
               <Text style={{ fontSize: 16, fontWeight: '700', color: getTextOnColor(coach.color) }}>Log</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </GlassCard>
 
         {loading ? (
           <ActivityIndicator size="large" color={coach.color} style={{ marginTop: 40 }} />
         ) : entries.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>⚖️</Text>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textPrimary }}>No entries yet</Text>
-            <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>Log your weight above to start tracking</Text>
-          </View>
+          <FadeInView delay={200} style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <View style={{
+              width: 64, height: 64, borderRadius: 32,
+              backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder,
+              alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+            }}>
+              <Scale size={28} color={colors.textMuted} strokeWidth={1.5} />
+            </View>
+            <Text style={{ ...FONT.subhead, color: colors.textPrimary }}>No entries yet</Text>
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4 }}>Log your weight above to start tracking</Text>
+          </FadeInView>
         ) : (
           <>
             {/* Stats */}
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: SPACING.md }}>
-              <View style={card({ flex: 1, alignItems: 'center' })}>
-                <Text style={{ fontSize: 22, fontWeight: '800', color: coach.color }}>{latest?.weight}</Text>
-                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>CURRENT ({units})</Text>
-              </View>
+            <FadeInView delay={200} style={{ flexDirection: 'row', gap: 10, marginBottom: SPACING.md }}>
+              <GlassCard style={{ flex: 1, alignItems: 'center' }} accentColor={coach.color} glow>
+                <Scale size={14} color={coach.color} strokeWidth={2.5} style={{ marginBottom: 4 }} />
+                <Text style={{ ...FONT.stat, color: coach.color }}>{latest?.weight}</Text>
+                <Text style={{ ...FONT.label, fontSize: 11, color: colors.textMuted, marginTop: 2 }}>CURRENT ({units})</Text>
+              </GlassCard>
               {change !== null && (
-                <View style={card({ flex: 1, alignItems: 'center' })}>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: parseFloat(change) <= 0 ? colors.green : colors.red }}>
+                <GlassCard style={{ flex: 1, alignItems: 'center' }} accentColor={parseFloat(change) <= 0 ? colors.green : colors.red}>
+                  {parseFloat(change) <= 0
+                    ? <TrendingDown size={14} color={colors.green} strokeWidth={2.5} style={{ marginBottom: 4 }} />
+                    : <TrendingUp size={14} color={colors.red} strokeWidth={2.5} style={{ marginBottom: 4 }} />
+                  }
+                  <Text style={{ ...FONT.stat, color: parseFloat(change) <= 0 ? colors.green : colors.red }}>
                     {parseFloat(change) > 0 ? '+' : ''}{change}
                   </Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>CHANGE ({units})</Text>
-                </View>
+                  <Text style={{ ...FONT.label, fontSize: 11, color: colors.textMuted, marginTop: 2 }}>CHANGE ({units})</Text>
+                </GlassCard>
               )}
-            </View>
+            </FadeInView>
 
             {/* Range Selector */}
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: SPACING.md }}>
+            <FadeInView delay={300} style={{ flexDirection: 'row', gap: 8, marginBottom: SPACING.md }}>
               {['1W', '1M', '3M', '1Y'].map(r => (
                 <TouchableOpacity
                   key={r}
                   style={{
                     flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: RADIUS.md,
-                    backgroundColor: range === r ? coach.color + '20' : colors.bgCard,
-                    borderWidth: 1, borderColor: range === r ? coach.color : colors.border,
+                    backgroundColor: range === r ? coach.color + '20' : colors.glassBg,
+                    borderWidth: 1, borderColor: range === r ? coach.color : colors.glassBorder,
                   }}
                   onPress={() => setRange(r)}
                 >
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: range === r ? coach.color : colors.textSecondary }}>{r}</Text>
+                  <Text style={{ ...FONT.caption, fontWeight: '600', color: range === r ? coach.color : colors.textSecondary }}>{r}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </FadeInView>
 
             {/* Chart */}
             {filtered.length > 1 && (
-              <View style={card()}>
+              <GlassCard fadeDelay={350} accentColor={coach.color}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 2 }}>
                   {filtered.slice(-20).map((entry, i) => {
                     const chartMin = min - 2;
@@ -182,31 +205,47 @@ export default function WeightScreen({ navigation }) {
                           width: '80%', borderRadius: 3, minHeight: 4,
                           height: `${Math.max(pct, 5)}%`,
                           backgroundColor: isLast ? coach.color : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'),
+                          ...(isLast && isDark ? {
+                            shadowColor: coach.color,
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.4,
+                            shadowRadius: GLOW.sm,
+                          } : {}),
                         }} />
                       </View>
                     );
                   })}
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                  <Text style={{ fontSize: 10, color: colors.textMuted }}>Low: {min} {units}</Text>
-                  <Text style={{ fontSize: 10, color: colors.textMuted }}>High: {max} {units}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <ArrowDown size={10} color={colors.textMuted} strokeWidth={2} />
+                    <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted }}>Low: {min} {units}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <ArrowUp size={10} color={colors.textMuted} strokeWidth={2} />
+                    <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted }}>High: {max} {units}</Text>
+                  </View>
                 </View>
-              </View>
+              </GlassCard>
             )}
 
             {/* History */}
-            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12 }}>History</Text>
-            {entries.slice(-10).reverse().map((e, i) => (
-              <View key={e.id} style={{
-                flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
-                borderBottomWidth: i < 9 ? 1 : 0, borderBottomColor: colors.border,
-              }}>
-                <Text style={{ flex: 1, fontSize: 14, color: colors.textSecondary }}>
-                  {new Date(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </Text>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>{e.weight} {units}</Text>
-              </View>
-            ))}
+            <FadeInView delay={400}>
+              <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: 12 }}>History</Text>
+              <GlassCard>
+                {entries.slice(-10).reverse().map((e, i) => (
+                  <View key={e.id} style={{
+                    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+                    borderBottomWidth: i < 9 ? 1 : 0, borderBottomColor: colors.glassBorder,
+                  }}>
+                    <Text style={{ flex: 1, ...FONT.body, fontSize: 14, color: colors.textSecondary }}>
+                      {new Date(e.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>{e.weight} {units}</Text>
+                  </View>
+                ))}
+              </GlassCard>
+            </FadeInView>
           </>
         )}
       </ScrollView>
