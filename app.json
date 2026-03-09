@@ -16,7 +16,67 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sayfit.app",
-      "usesAppleSignIn": true
+      "buildNumber": "1",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "SayFit does not use the camera.",
+        "NSPhotoLibraryUsageDescription": "SayFit does not access your photo library.",
+        "NSMicrophoneUsageDescription": "Allow SayFit to use the microphone so you can describe your workout by voice."
+      },
+      "privacyManifests": {
+        "NSPrivacyTracking": false,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [
+          {
+            "NSPrivacyDataType": "NSPrivacyDataTypeName",
+            "NSPrivacyDataTypeLinked": true,
+            "NSPrivacyDataTypeTracking": false,
+            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyDataType": "NSPrivacyDataTypeEmailAddress",
+            "NSPrivacyDataTypeLinked": true,
+            "NSPrivacyDataTypeTracking": false,
+            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyDataType": "NSPrivacyDataTypeUserID",
+            "NSPrivacyDataTypeLinked": true,
+            "NSPrivacyDataTypeTracking": false,
+            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyDataType": "NSPrivacyDataTypeHealthAndFitness",
+            "NSPrivacyDataTypeLinked": true,
+            "NSPrivacyDataTypeTracking": false,
+            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+          },
+          {
+            "NSPrivacyDataType": "NSPrivacyDataTypeDeviceID",
+            "NSPrivacyDataTypeLinked": true,
+            "NSPrivacyDataTypeTracking": false,
+            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+          }
+        ],
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategorySystemBootTime",
+            "NSPrivacyAccessedAPITypeReasons": ["35F9.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryDiskSpace",
+            "NSPrivacyAccessedAPITypeReasons": ["E174.1"]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

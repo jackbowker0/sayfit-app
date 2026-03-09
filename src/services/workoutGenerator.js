@@ -94,32 +94,41 @@ export async function generateSmartWorkout(parsed) {
   const memory = await buildMemorySummary();
 
   const allowedEquipment = getAllowedEquipment(profile?.equipment);
-  const condensedExercises = getCondensedExerciseList(allowedEquipment);
 
-  const system = buildWorkoutSystemPrompt();
-  const prompt = buildWorkoutUserPrompt(
-    parsed.rawInput || '', parsed, profile, memory, condensedExercises
-  );
+  // Try AI generation if Supabase is configured
+  if (SUPABASE_URL && SUPABASE_URL !== 'https://YOUR_PROJECT_REF.supabase.co' && SUPABASE_ANON_KEY) {
+    try {
+      const condensedExercises = getCondensedExerciseList(allowedEquipment);
+      const system = buildWorkoutSystemPrompt();
+      const prompt = buildWorkoutUserPrompt(
+        parsed.rawInput || '', parsed, profile, memory, condensedExercises
+      );
 
-  const response = await fetch(WORKOUT_GEN_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({ system, prompt, max_tokens: 1500 }),
-  });
+      const response = await fetch(WORKOUT_GEN_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ system, prompt, max_tokens: 1500 }),
+      });
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(`Workout generation failed: ${errData.error || response.status}`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(`Workout generation failed: ${errData.error || response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data.text || '';
+      const aiWorkout = parseAIResponse(rawText);
+      return hydrateWorkout(aiWorkout, parsed, profile, allowedEquipment);
+    } catch (e) {
+      console.warn('[WorkoutGen] AI generation failed, falling back to local:', e.message);
+    }
   }
 
-  const data = await response.json();
-  const rawText = data.text || '';
-  const aiWorkout = parseAIResponse(rawText);
-
-  return hydrateWorkout(aiWorkout, parsed, profile, allowedEquipment);
+  // Local fallback — rule-based generator, works offline
+  return generateLocalWorkout(parsed, profile, allowedEquipment);
 }
 
 // Async regenerate (used by Shuffle button)
@@ -286,6 +295,116 @@ function hydrateWorkout(aiWorkout, parsed, profile, allowedEquipment) {
       warmup: warmupCount,
       main: mainCount,
       cooldown: cooldownCount,
+    },
+  };
+}
+
+// ─── LOCAL FALLBACK GENERATOR ────────────────────────────────────
+
+const FOCUS_TO_MUSCLE = {
+  upper:    ['Arms', 'Chest', 'Shoulders', 'Back'],
+  lower:    ['Legs', 'Glutes'],
+  core:     ['Core'],
+  cardio:   ['Legs', 'Core', 'Full Body'],
+  fullBody: ['Legs', 'Core', 'Arms', 'Chest', 'Back', 'Glutes', 'Shoulders'],
+  stretch:  ['Full Body', 'Core'],
+  back:     ['Back'],
+  chest:    ['Chest'],
+  shoulders:['Shoulders'],
+  glutes:   ['Glutes'],
+};
+
+function generateLocalWorkout(parsed, profile, allowedEquipment) {
+  const { duration, energy, focusAreas } = parsed;
+  const level = profile?.fitnessLevel || 'intermediate';
+
+  // Work/rest timing by level
+  const timing = {
+    beginner:     { work: 30, rest: 20, warmupRest: 8 },
+    intermediate: { work: 40, rest: 15, warmupRest: 5 },
+    advanced:     { work: 50, rest: 10, warmupRest: 5 },
+  }[level] || { work: 40, rest: 15, warmupRest: 5 };
+
+  // Intensity filter
+  const intensityRange = { low: [1, 5], medium: [4, 7], high: [6, 10] }[energy] || [4, 7];
+
+  // Target muscles from focus areas
+  const targetMuscles = new Set(
+    focusAreas.flatMap(f => FOCUS_TO_MUSCLE[f] || ['Full Body'])
+  );
+
+  const pool = EXERCISES.filter(ex =>
+    allowedEquipment.includes(ex.equipment) &&
+    ex.intensity >= intensityRange[0] &&
+    ex.intensity <= intensityRange[1] &&
+    (targetMuscles.has(ex.muscle) || targetMuscles.has('Full Body'))
+  );
+
+  // Shuffle pool
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+
+  // Figure out how many exercises fit the duration
+  const cycleTime = timing.work + timing.rest;
+  const includeWarmup = duration >= 10;
+  const includeCooldown = duration >= 12;
+  const warmupSlots = includeWarmup ? 2 : 0;
+  const cooldownSlots = includeCooldown ? 2 : 0;
+  const mainSeconds = duration * 60 - (warmupSlots * (30 + timing.warmupRest)) - (cooldownSlots * (30 + timing.warmupRest));
+  const mainCount = Math.max(3, Math.floor(mainSeconds / cycleTime));
+
+  // Pick warmup/cooldown exercises
+  const warmupPool = EXERCISES.filter(ex => ex.category === 'warmup' && allowedEquipment.includes(ex.equipment));
+  const cooldownPool = EXERCISES.filter(ex => ex.category === 'cooldown' && allowedEquipment.includes(ex.equipment));
+
+  const warmupExercises = warmupPool.sort(() => Math.random() - 0.5).slice(0, warmupSlots).map(ex => ({
+    ...ex, duration: 30, rest: timing.warmupRest, phase: 'warmup',
+  }));
+  const cooldownExercises = cooldownPool.sort(() => Math.random() - 0.5).slice(0, cooldownSlots).map(ex => ({
+    ...ex, duration: 30, rest: timing.warmupRest, phase: 'cooldown',
+  }));
+
+  // Pick main exercises, avoid back-to-back same muscle
+  const mainExercises = [];
+  let lastMuscle = '';
+  for (const ex of shuffled) {
+    if (mainExercises.length >= mainCount) break;
+    if (ex.muscle === lastMuscle && mainExercises.length < mainCount - 1) continue;
+    mainExercises.push({ ...ex, duration: timing.work, rest: timing.rest, phase: 'main' });
+    lastMuscle = ex.muscle;
+  }
+  // Fill remaining slots if muscle-alternation filtered too many
+  if (mainExercises.length < mainCount) {
+    for (const ex of shuffled) {
+      if (mainExercises.length >= mainCount) break;
+      if (mainExercises.find(e => e.id === ex.id)) continue;
+      mainExercises.push({ ...ex, duration: timing.work, rest: timing.rest, phase: 'main' });
+    }
+  }
+
+  const allExercises = [...warmupExercises, ...mainExercises, ...cooldownExercises];
+  if (allExercises.length > 0) allExercises[allExercises.length - 1].rest = 0;
+
+  const estCalories = Math.round(duration * (energy === 'high' ? 8 : energy === 'low' ? 4 : 6));
+
+  return {
+    id: `local_${Date.now()}`,
+    name: buildWorkoutName(parsed, profile),
+    type: 'just-talk',
+    description: buildWorkoutDescription(parsed, profile),
+    duration,
+    estimatedCalories: estCalories,
+    exercises: allExercises,
+    workDuration: timing.work,
+    restDuration: timing.rest,
+    parsed,
+    focus: focusAreas.join(', '),
+    energyLevel: energy,
+    fitnessLevel: level,
+    equipmentUsed: allowedEquipment,
+    structure: {
+      warmup: warmupExercises.length,
+      main: mainExercises.length,
+      cooldown: cooldownExercises.length,
     },
   };
 }

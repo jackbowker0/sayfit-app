@@ -62,6 +62,8 @@ function getDefaultProfile() {
     units: 'lbs',
     restDuration: 90,
     workoutDays: [],  // [0,1,2,3,4,5,6] where 0=Mon, 6=Sun
+    notificationsEnabled: false,
+    reminderHour: 18,
   };
 }
 

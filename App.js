@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -15,6 +15,7 @@ import {
   addNotificationResponseListener,
   getNotificationRoute,
 } from './src/services/notifications';
+import { scheduleWorkoutReminders } from './src/services/localNotifications';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import TabBar from './src/components/TabBar';
 import { COACHES } from './src/constants/coaches';
@@ -38,6 +39,7 @@ import PostDetailScreen from './src/screens/PostDetailScreen';
 import ChallengesScreen from './src/screens/ChallengesScreen';
 import ChallengeDetailScreen from './src/screens/ChallengeDetailScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import PRWallScreen from './src/screens/PRWallScreen';
 import { hasOnboarded, getUserProfile } from './src/services/userProfile';
 
 const Stack = createNativeStackNavigator();
@@ -81,6 +83,15 @@ function AppInner({ onboarded, needsTutorial }) {
     }
   }, [isAuthenticated]);
 
+  // Schedule local notifications on mount and whenever app comes to foreground
+  useEffect(() => {
+    scheduleWorkoutReminders().catch(() => {});
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') scheduleWorkoutReminders().catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
+
   // Handle notification taps — navigate to the relevant screen
   useEffect(() => {
     const sub = addNotificationResponseListener((response) => {
@@ -123,6 +134,7 @@ function AppInner({ onboarded, needsTutorial }) {
           <Stack.Screen name="Challenges" component={ChallengesScreen} />
           <Stack.Screen name="ChallengeDetail" component={ChallengeDetailScreen} />
           <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+          <Stack.Screen name="PRWall" component={PRWallScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </WorkoutProvider>

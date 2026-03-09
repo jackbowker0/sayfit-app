@@ -5,10 +5,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Sun, Moon, Smartphone, ChevronLeft, User, Dumbbell, Calendar, Timer, Scale } from 'lucide-react-native';
+import { Sun, Moon, Smartphone, ChevronLeft, User, Dumbbell, Calendar, Timer, Scale, Bell, Volume2 } from 'lucide-react-native';
 import FadeInView from '../components/FadeInView';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -19,7 +19,9 @@ import { useTheme } from '../hooks/useTheme';
 import { getUserProfile, saveUserProfile, resetOnboarding, GOAL_OPTIONS, EQUIPMENT_OPTIONS, FITNESS_LEVELS, DAY_OPTIONS } from '../services/userProfile';
 import { clearWorkoutHistory } from '../services/storage';
 import { clearAchievements, getAchievementStats } from '../services/achievements';
+import { scheduleWorkoutReminders } from '../services/localNotifications';
 import * as haptics from '../services/haptics';
+import * as tts from '../services/tts';
 import { COACH_ICONS } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
 
@@ -51,10 +53,13 @@ export default function SettingsScreen({ navigation }) {
   const [units, setUnits] = useState('lbs');
   const [restDuration, setRestDuration] = useState(90);
   const [workoutDays, setWorkoutDays] = useState([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [reminderHour, setReminderHour] = useState(18);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [achieveStats, setAchieveStats] = useState(null);
 
-  useEffect(() => { loadProfile(); loadAchievementStats(); }, []);
+  useEffect(() => { loadProfile(); loadAchievementStats(); tts.isEnabled().then(setTtsEnabled); }, []);
 
   // Warn when leaving with unsaved changes
   useEffect(() => {
@@ -80,6 +85,8 @@ export default function SettingsScreen({ navigation }) {
     setUnits(p.units || 'lbs');
     setRestDuration(p.restDuration || 90);
     setWorkoutDays(p.workoutDays || []);
+    setNotificationsEnabled(p.notificationsEnabled ?? false);
+    setReminderHour(p.reminderHour ?? 18);
   };
 
   const loadAchievementStats = async () => {
@@ -104,10 +111,12 @@ export default function SettingsScreen({ navigation }) {
       name: name.trim(), fitnessLevel, goals, equipment,
       weeklyGoal: workoutDays.length > 0 ? workoutDays.length : weeklyGoal,
       units, restDuration, coachId, workoutDays,
+      notificationsEnabled, reminderHour,
     });
     setHasChanges(false);
     // Sync weeklyGoal with days if days are set
     if (workoutDays.length > 0) setWeeklyGoal(workoutDays.length);
+    scheduleWorkoutReminders().catch(() => {});
     Alert.alert('Saved', 'Your settings have been updated.');
   };
 
@@ -311,6 +320,74 @@ export default function SettingsScreen({ navigation }) {
             <Text style={ds.fieldHint}>
               {workoutDays.length === 0 ? 'No schedule set \u2014 weekly goal used instead' : `${workoutDays.length} days/week \u00b7 ${workoutDays.map(d => DAY_OPTIONS[d].label).join(', ')}`}
             </Text>
+          </GlassCard>
+        </FadeInView>
+
+        {/* NOTIFICATIONS */}
+        <FadeInView delay={325}>
+          <Text style={[ds.sectionTitle, FONT.label]}>Notifications</Text>
+          <GlassCard>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Bell size={16} color={notificationsEnabled ? coach.color : colors.textMuted} />
+                <View>
+                  <Text style={[FONT.body, { color: colors.textPrimary }]}>Workout Reminders</Text>
+                  <Text style={[FONT.caption, { color: colors.textMuted }]}>
+                    {notificationsEnabled ? 'On' : 'Off'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={notificationsEnabled}
+                onValueChange={(v) => { setNotificationsEnabled(v); markChanged(); }}
+                trackColor={{ false: colors.glassBorder, true: coach.color + '60' }}
+                thumbColor={notificationsEnabled ? coach.color : colors.textMuted}
+              />
+            </View>
+            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 14 }} />
+
+            {/* Coach Voice TTS */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Volume2 size={16} color={ttsEnabled ? coach.color : colors.textMuted} />
+                <View>
+                  <Text style={[FONT.body, { color: colors.textPrimary }]}>Coach Voice</Text>
+                  <Text style={[FONT.caption, { color: colors.textMuted }]}>
+                    {ttsEnabled ? 'Speaking during workouts' : 'Silent'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={ttsEnabled}
+                onValueChange={(v) => { haptics.tap(); setTtsEnabled(v); tts.setEnabled(v); }}
+                trackColor={{ false: colors.glassBorder, true: coach.color + '60' }}
+                thumbColor={ttsEnabled ? coach.color : colors.textMuted}
+              />
+            </View>
+
+            {notificationsEnabled && (
+              <>
+                <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary, marginTop: SPACING.lg }]}>Reminder Time</Text>
+                <View style={ds.toggleRow}>
+                  {[
+                    { label: '7 AM', hour: 7 },
+                    { label: '12 PM', hour: 12 },
+                    { label: '6 PM', hour: 18 },
+                    { label: '8 PM', hour: 20 },
+                  ].map(opt => (
+                    <TouchableOpacity
+                      key={opt.hour}
+                      style={[ds.toggleBtn, reminderHour === opt.hour && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                      onPress={() => { haptics.tick(); setReminderHour(opt.hour); markChanged(); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[ds.toggleText, reminderHour === opt.hour && { color: coach.color }]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={ds.fieldHint}>Reminders fire on your scheduled training days</Text>
+              </>
+            )}
           </GlassCard>
         </FadeInView>
 

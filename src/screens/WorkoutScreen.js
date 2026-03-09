@@ -9,8 +9,8 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import * as haptics from '../services/haptics';
 import { Flame, Wind, RefreshCw, SkipForward, Moon, Pause, Play, X, Heart, ClipboardList, Pencil, Mic, Zap, Info } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -28,6 +28,7 @@ import ExerciseGuide from '../components/ExerciseGuide';
 import { capture } from '../services/posthog';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
+import * as tts from '../services/tts';
 
 const VOICE_COMMANDS = [
   { cmd: 'harder', label: 'Harder', Icon: Flame },
@@ -114,8 +115,40 @@ export default function WorkoutScreen({ navigation }) {
     if (state.notification) { const t = setTimeout(clearNotification, 2500); return () => clearTimeout(t); }
   }, [state.notification]);
 
+  // ─── HAPTICS: Countdown ticks on last 3 seconds ──────────────
+  useEffect(() => {
+    if (isActive && !isPaused && !isTransitioning) {
+      if (state.timer === 3 || state.timer === 2 || state.timer === 1) {
+        haptics.tick();
+      }
+    }
+  }, [state.timer]);
+
+  useEffect(() => {
+    if (isResting) {
+      if (state.restTimer === 3 || state.restTimer === 2 || state.restTimer === 1) {
+        haptics.tick();
+      }
+    }
+  }, [state.restTimer]);
+
+  // ─── TTS: Speak new coach messages ───────────────────────────
+  const lastSpokenId = useRef(null);
+  useEffect(() => {
+    const coachMessages = state.chatLog.filter(e => e.isCoach);
+    if (coachMessages.length === 0) return;
+    const latest = coachMessages[coachMessages.length - 1];
+    if (latest.id !== lastSpokenId.current) {
+      lastSpokenId.current = latest.id;
+      tts.speak(latest.msg, coachId);
+    }
+  }, [state.chatLog]);
+
+  // Stop TTS when leaving the workout screen
+  useEffect(() => () => tts.stop(), []);
+
   const handleCommand = useCallback(async (cmd) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.medium();
     const label = VOICE_COMMANDS.find(v => v.cmd === cmd)?.label || cmd;
     let coachMessage;
     try {

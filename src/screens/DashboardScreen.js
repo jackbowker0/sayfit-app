@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
-import { Settings, ChevronRight, Check, Calendar, Flame } from 'lucide-react-native';
+import { Settings, ChevronRight, Check, Calendar, Flame, Zap, Moon, Trophy } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
@@ -129,6 +129,14 @@ export default function DashboardScreen({ navigation }) {
 
   const getGreeting = () => { const h = new Date().getHours(); if (h < 12) return 'Good morning'; if (h < 17) return 'Good afternoon'; return 'Good evening'; };
 
+  const getTodayStatus = () => {
+    if (!hasSchedule) return null;
+    if (todayIsPlanned && todayDone)  return { label: 'Done today', color: '#2ECC40', Icon: Check };
+    if (todayIsPlanned && !todayDone) return { label: 'Workout day', color: coach.color, Icon: Zap };
+    if (!todayIsPlanned && todayDone) return { label: 'Bonus workout', color: coach.color, Icon: Trophy };
+    return { label: 'Rest day', color: colors.textMuted, Icon: Moon };
+  };
+
   const getCoachOneLiner = () => {
     if (!memory) return '';
     if (memory.isFirstWorkout) {
@@ -190,16 +198,28 @@ export default function DashboardScreen({ navigation }) {
       <ScrollView contentContainerStyle={{ padding: SPACING.screenPadding, paddingBottom: 20 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor={coach.color} />}>
 
         {/* Header */}
-        <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }} accessible accessibilityRole="header">
+        <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }} accessible accessibilityRole="header">
           <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={{ ...FONT.title, color: colors.textPrimary }}>
               {getGreeting()}{userName ? `, ${userName}` : ''}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 }}>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: coach.color + '18', alignItems: 'center', justifyContent: 'center' }}>
-                <CoachIcon size={14} color={coach.color} strokeWidth={2.5} />
-              </View>
-              <Text style={{ fontSize: 14, color: colors.textSecondary }}>{getCoachOneLiner()}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+              {/* Today status pill */}
+              {(() => { const s = getTodayStatus(); if (!s) return null; const PillIcon = s.Icon; return (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, backgroundColor: s.color + '18', borderWidth: 1, borderColor: s.color + '35' }}>
+                  <PillIcon size={11} color={s.color} strokeWidth={2.5} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: s.color, letterSpacing: 0.2 }}>{s.label}</Text>
+                </View>
+              ); })()}
+              {/* Coach one-liner — hidden for logger-only users */}
+              {!isLogger && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: coach.color + '18', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CoachIcon size={12} color={coach.color} strokeWidth={2.5} />
+                  </View>
+                  <Text style={{ fontSize: 13, color: colors.textSecondary, flex: 1 }} numberOfLines={1}>{getCoachOneLiner()}</Text>
+                </View>
+              )}
             </View>
           </View>
           <TouchableOpacity
@@ -213,12 +233,6 @@ export default function DashboardScreen({ navigation }) {
             <Settings size={18} color={colors.textMuted} strokeWidth={1.8} />
           </TouchableOpacity>
         </FadeInView>
-
-        {/* Weight Card */}
-        <WeightCard key={weightKey} navigation={navigation} onWeightLogged={() => setWeightKey(k => k + 1)} />
-
-        {/* Accountability Partner Widget */}
-        <AccountabilityWidget navigation={navigation} />
 
         {/* Coach Nudge */}
         {nudge && (
@@ -287,26 +301,30 @@ export default function DashboardScreen({ navigation }) {
               const isPlanned = hasSchedule && workoutDays.includes(i);
               let bgColor = 'transparent', borderW = 0, borderC = 'transparent', dotColor = colors.textMuted;
               if (active) { bgColor = coach.color; }
-              else if (isPlanned && isToday) { borderW = 2; borderC = coach.color; }
-              else if (isPlanned) { bgColor = coach.color + '15'; borderW = 1; borderC = coach.color + '30'; }
+              else if (isPlanned && isToday) { borderW = 2.5; borderC = coach.color; }
+              else if (isPlanned) { bgColor = coach.color + '15'; borderW = 1.5; borderC = coach.color + '40'; }
               else if (isToday) { borderW = 1.5; borderC = colors.textMuted; }
               if (isToday) dotColor = coach.color;
               return (
                 <View key={i} style={{ alignItems: 'center', flex: 1 }} accessible accessibilityLabel={`${DAY_NAMES[i]}: ${active ? 'workout completed' : isPlanned ? 'planned workout day' : isToday ? 'today' : 'rest day'}`}>
                   <View style={{
-                    width: 32, height: 32, borderRadius: 16,
+                    width: 42, height: 42, borderRadius: 21,
                     backgroundColor: bgColor, borderWidth: borderW, borderColor: borderC,
                     alignItems: 'center', justifyContent: 'center',
-                    ...(active && isDark ? { shadowColor: coach.color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: GLOW.sm, elevation: 2 } : {}),
+                    ...(active && isDark ? { shadowColor: coach.color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: GLOW.sm, elevation: 3 } : {}),
                   }}>
-                    {active && <Check size={14} color={getTextOnColor(coach.color)} strokeWidth={3} />}
+                    {active && <Check size={16} color={getTextOnColor(coach.color)} strokeWidth={3} />}
                   </View>
-                  <Text style={{ fontSize: 11, marginTop: 4, color: dotColor, fontWeight: isToday ? '700' : '400' }}>{day}</Text>
+                  <Text style={{ fontSize: 12, marginTop: 5, color: dotColor, fontWeight: isToday ? '700' : '500' }}>{day}</Text>
                 </View>
               );
             })}
           </View>
         </GlassCard>
+
+        {/* Weight + Accountability — below the key action cards */}
+        <WeightCard key={weightKey} navigation={navigation} onWeightLogged={() => setWeightKey(k => k + 1)} />
+        <AccountabilityWidget navigation={navigation} />
 
         {/* Recent Achievements */}
         {recentBadges.length > 0 && (

@@ -10,6 +10,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { getSupabaseClient } from './supabaseClient';
 
 // Configure default notification behavior
@@ -56,7 +57,8 @@ export async function registerForPushNotifications() {
   }
 
   // Get the Expo push token
-  const tokenData = await Notifications.getExpoPushTokenAsync();
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  const tokenData = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
   const token = tokenData.data;
 
   // Store token in Supabase profile
@@ -137,6 +139,9 @@ export function getNotificationRoute(notification) {
     case 'challenge_invite':
       return { screen: 'ChallengeDetail', params: { challengeId: data.challenge_id } };
     case 'accountability_nudge':
+    case 'workout_reminder':
+    case 'inactivity_nudge':
+    case 'streak_at_risk':
       return { screen: 'MainTabs' };
     default:
       return null;

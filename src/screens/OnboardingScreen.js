@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import FadeInView from '../components/FadeInView';
 import {
   UserCircle, BarChart3, Dumbbell, Calendar, Lightbulb, Mic,
-  MessageCircle, ClipboardList, Zap, ChevronLeft, ChevronRight, Check,
+  MessageCircle, ClipboardList, Zap, ChevronLeft, ChevronRight, Check, Bell,
 } from 'lucide-react-native';
 import { COACH_ICONS } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
@@ -28,11 +28,12 @@ import {
 } from '../services/userProfile';
 import { useWorkoutContext } from '../context/WorkoutContext';
 import * as haptics from '../services/haptics';
-import { capture } from '../services/posthog';
+import * as Notifications from 'expo-notifications';
+import { scheduleWorkoutReminders } from '../services/localNotifications';
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
-const STEP_ICONS = [UserCircle, BarChart3, Dumbbell, Calendar, Lightbulb, Mic];
+const STEP_ICONS = [UserCircle, BarChart3, Dumbbell, Calendar, Lightbulb, Mic, Bell];
 
 const MODE_ICON_MAP = {
   coach: MessageCircle,
@@ -88,12 +89,7 @@ export default function OnboardingScreen({ navigation }) {
   // Key used to force re-mount of step content for enter/exit animations
   const [stepKey, setStepKey] = useState(0);
 
-  // POSTHOG: onboarding started
-  React.useEffect(() => { capture('onboarding_started'); }, []);
-
   const coach = COACHES[selectedCoach];
-
-  const _STEP_NAMES = ['name', 'fitness_level', 'equipment', 'workout_days', 'training_mode'];
 
   const animateTransition = useCallback((nextStep) => {
     setStepKey(k => k + 1);
@@ -103,11 +99,19 @@ export default function OnboardingScreen({ navigation }) {
   const handleNext = () => {
     if (step < TOTAL_STEPS - 1) {
       haptics.tap();
-      capture('onboarding_step_completed', { step, step_name: _STEP_NAMES[step] });
-      animateTransition(step + 1);
+      // Logger users skip the coach selection step (step 5)
+      const next = step === 4 && preferredMode === 'logger' ? 6 : step + 1;
+      animateTransition(next);
     }
   };
-  const handleBack = () => { if (step > 0) { haptics.tap(); animateTransition(step - 1); } };
+  const handleBack = () => {
+    if (step > 0) {
+      haptics.tap();
+      // Logger users skip the coach selection step (step 5)
+      const prev = step === 6 && preferredMode === 'logger' ? 4 : step - 1;
+      animateTransition(prev);
+    }
+  };
   const toggleEquipment = (id) => { haptics.tick(); setEquipment(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]); };
   const toggleDay = (id) => {
     haptics.tick();
@@ -117,7 +121,7 @@ export default function OnboardingScreen({ navigation }) {
     });
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async (notificationsEnabled = false) => {
     haptics.success();
     setSaving(true);
     try {
@@ -126,10 +130,15 @@ export default function OnboardingScreen({ navigation }) {
         coachId: selectedCoach, workoutDays, preferredMode,
         weeklyGoal: workoutDays.length > 0 ? workoutDays.length : 4,
         hasSeenTutorial: false,
+        notificationsEnabled,
+        reminderHour: 18,
       });
       await setOnboarded();
-      capture('onboarding_completed', { fitness_level: fitnessLevel, equipment, workout_days_count: workoutDays.length, preferred_mode: preferredMode, coach_id: selectedCoach });
       setCoachId(selectedCoach);
+
+      if (notificationsEnabled) {
+        scheduleWorkoutReminders().catch(() => {});
+      }
 
       const tutorialMode = preferredMode === 'logger' ? 'logger' : 'coach';
       navigation.replace('Tutorial', { mode: tutorialMode });
@@ -138,6 +147,12 @@ export default function OnboardingScreen({ navigation }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAllowNotifications = async () => {
+    haptics.tap();
+    const { status } = await Notifications.requestPermissionsAsync();
+    await handleFinish(status === 'granted');
   };
 
   const canProceed = () => {
@@ -202,7 +217,7 @@ export default function OnboardingScreen({ navigation }) {
         <View style={styles.progressBarTrack(colors)}>
           <View
             style={[
-              styles.progressBarFill(coach.color, step),
+              styles.progressBarFill(coach.color, preferredMode === 'logger' && step >= 6 ? step - 1 : step, preferredMode === 'logger' ? TOTAL_STEPS - 1 : TOTAL_STEPS),
               isDark && {
                 shadowColor: coach.color,
                 shadowOffset: { width: 0, height: 0 },
@@ -219,7 +234,7 @@ export default function OnboardingScreen({ navigation }) {
 
             {/* Step 0: Name */}
             {step === 0 && (
-              <FadeInView style={{ alignItems: 'center' }}>
+              <View style={{ alignItems: 'center' }}>
                 <View style={styles.stepIconWrap(colors)}>
                   <UserCircle size={36} color={coach.color} />
                 </View>
@@ -228,10 +243,10 @@ export default function OnboardingScreen({ navigation }) {
                 <TextInput
                   style={[styles.nameInput, { backgroundColor: colors.bgInput, borderColor: colors.border, color: colors.textPrimary }]}
                   placeholder="Your name" placeholderTextColor={colors.textDim}
-                  value={name} onChangeText={setName} autoFocus returnKeyType="next" onSubmitEditing={handleNext} maxLength={20}
+                  value={name} onChangeText={setName} returnKeyType="next" onSubmitEditing={handleNext} maxLength={20}
                   accessibilityLabel="Enter your name"
                 />
-              </FadeInView>
+              </View>
             )}
 
             {/* Step 1: Fitness Level */}
@@ -509,47 +524,82 @@ export default function OnboardingScreen({ navigation }) {
                 </GlassCard>
               </FadeInView>
             )}
+            {/* Step 6: Notifications */}
+            {step === 6 && (
+              <FadeInView style={{ alignItems: 'center' }}>
+                <View style={[styles.stepIconWrap(colors), { backgroundColor: coach.color + '15', borderColor: coach.color + '40' }]}>
+                  <Bell size={36} color={coach.color} />
+                </View>
+                <Text style={[FONT.title, { color: colors.textPrimary, textAlign: 'center', marginBottom: 8 }]}>Stay on track</Text>
+                <Text style={[FONT.body, { color: colors.textMuted, textAlign: 'center', marginBottom: 36 }]}>
+                  Get reminders on your training days so you never miss a session.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.nextButton, { backgroundColor: coach.color, width: '100%', justifyContent: 'center', marginBottom: 16 }]}
+                  onPress={handleAllowNotifications}
+                  disabled={saving}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Allow notifications"
+                >
+                  {saving ? (
+                    <ActivityIndicator color={getTextOnColor(coach.color)} size="small" />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Bell size={16} color={getTextOnColor(coach.color)} />
+                      <Text style={[FONT.body, { fontWeight: '700', color: getTextOnColor(coach.color) }]}>Allow Notifications</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleFinish(false)}
+                  disabled={saving}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip notifications"
+                >
+                  <Text style={[FONT.caption, { color: colors.textMuted }]}>Not now</Text>
+                </TouchableOpacity>
+              </FadeInView>
+            )}
           </ScrollView>
         </FadeInView>
 
-        {/* Footer */}
-        <View style={[styles.footer, { borderTopColor: colors.border }]}>
-          {step > 0 && (
-            <TouchableOpacity style={styles.backButton} onPress={handleBack} accessibilityRole="button" accessibilityLabel="Go back">
-              <ChevronLeft size={20} color={colors.textSecondary} />
-              <Text style={[FONT.body, { color: colors.textSecondary, fontWeight: '500', marginLeft: 4 }]}>Back</Text>
-            </TouchableOpacity>
-          )}
-          <View style={{ flex: 1 }} />
-          {step < TOTAL_STEPS - 1 ? (
-            <TouchableOpacity
-              style={[styles.nextButton, { backgroundColor: canProceed() ? coach.color : colors.bgSubtle }]}
-              onPress={handleNext} disabled={!canProceed()} activeOpacity={0.8}
-              accessibilityRole="button" accessibilityLabel="Next step"
-            >
-              <Text style={[FONT.body, { fontWeight: '700', color: canProceed() ? getTextOnColor(coach.color) : colors.textDim, marginRight: 4 }]}>Next</Text>
-              <ChevronRight size={18} color={canProceed() ? getTextOnColor(coach.color) : colors.textDim} />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.nextButton, { backgroundColor: coach.color }]}
-              onPress={handleFinish} disabled={saving} activeOpacity={0.8}
-              accessibilityRole="button" accessibilityLabel="Finish setup and start"
-            >
-              {saving ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ActivityIndicator color={getTextOnColor(coach.color)} size="small" />
-                  <Text style={[FONT.body, { fontWeight: '700', color: getTextOnColor(coach.color) }]}>Setting up...</Text>
-                </View>
-              ) : (
+        {/* Footer — hidden on notification step (step 6 has inline buttons) */}
+        {step < TOTAL_STEPS - 1 && (
+          <View style={[styles.footer, { borderTopColor: colors.border }]}>
+            {step > 0 && (
+              <TouchableOpacity style={styles.backButton} onPress={handleBack} accessibilityRole="button" accessibilityLabel="Go back">
+                <ChevronLeft size={20} color={colors.textSecondary} />
+                <Text style={[FONT.body, { color: colors.textSecondary, fontWeight: '500', marginLeft: 4 }]}>Back</Text>
+              </TouchableOpacity>
+            )}
+            <View style={{ flex: 1 }} />
+            {step < TOTAL_STEPS - 2 ? (
+              <TouchableOpacity
+                style={[styles.nextButton, { backgroundColor: canProceed() ? coach.color : colors.bgSubtle }]}
+                onPress={handleNext} disabled={!canProceed()} activeOpacity={0.8}
+                accessibilityRole="button" accessibilityLabel="Next step"
+              >
+                <Text style={[FONT.body, { fontWeight: '700', color: canProceed() ? getTextOnColor(coach.color) : colors.textDim, marginRight: 4 }]}>Next</Text>
+                <ChevronRight size={18} color={canProceed() ? getTextOnColor(coach.color) : colors.textDim} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.nextButton, { backgroundColor: coach.color }]}
+                onPress={handleNext} activeOpacity={0.8}
+                accessibilityRole="button" accessibilityLabel="Next step"
+              >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[FONT.body, { fontWeight: '700', color: getTextOnColor(coach.color) }]}>Let's Go</Text>
+                  <Text style={[FONT.body, { fontWeight: '700', color: getTextOnColor(coach.color) }]}>Next</Text>
                   <ChevronRight size={18} color={getTextOnColor(coach.color)} />
                 </View>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -605,9 +655,9 @@ styles.progressBarTrack = (colors) => ({
   marginHorizontal: SPACING.lg, marginTop: SPACING.sm, borderRadius: 2,
   overflow: 'hidden',
 });
-styles.progressBarFill = (color, step) => ({
+styles.progressBarFill = (color, step, total = TOTAL_STEPS) => ({
   height: '100%', borderRadius: 2,
-  width: `${((step + 1) / TOTAL_STEPS) * 100}%`,
+  width: `${((step + 1) / total) * 100}%`,
   backgroundColor: color,
 });
 styles.stepIconWrap = (colors) => ({

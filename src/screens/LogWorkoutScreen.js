@@ -30,7 +30,7 @@ import {
   parseExerciseInput, saveExerciseSession, compareToLast,
   getTemplates, saveTemplate, deleteTemplate, markTemplateUsed,
   getOverloadSuggestion, getSmartRestDuration, COMMON_EXERCISES,
-  getExerciseLog,
+  getExerciseLog, getLastSessionSets,
 } from '../services/exerciseLog';
 import { saveWorkout } from '../services/storage';
 import { getUserProfile } from '../services/userProfile';
@@ -41,6 +41,7 @@ import ExerciseNoteEditor from '../components/ExerciseNoteEditor';
 import { getNotesForWorkout } from '../services/exerciseNotes';
 import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
+import { scheduleWorkoutReminders } from '../services/localNotifications';
 
 // ─── MERGED EXERCISE NAME LIST ──────────────────────────────────
 const ALL_EXERCISE_NAMES = (() => {
@@ -82,6 +83,66 @@ const PRESETS = [
 ];
 
 const REST_OPTIONS = [60, 90, 120, 180];
+
+// ─── STARTER TEMPLATES ──────────────────────────────────────────
+const STARTER_TEMPLATES = [
+  {
+    id: 'starter_push',
+    name: 'Push Day',
+    exercises: [
+      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Overhead Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Incline Dumbbell Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+      { name: 'Lateral Raise', sets: [{ reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }] },
+      { name: 'Tricep Pushdown', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+    ],
+  },
+  {
+    id: 'starter_pull',
+    name: 'Pull Day',
+    exercises: [
+      { name: 'Deadlift', sets: [{ reps: 5, weight: 0 }, { reps: 5, weight: 0 }, { reps: 5, weight: 0 }] },
+      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Pull Ups', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Cable Row', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Bicep Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+    ],
+  },
+  {
+    id: 'starter_legs',
+    name: 'Leg Day',
+    exercises: [
+      { name: 'Squat', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Leg Press', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Romanian Deadlift', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+      { name: 'Leg Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Calf Raise', sets: [{ reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }] },
+    ],
+  },
+  {
+    id: 'starter_upper',
+    name: 'Upper Body',
+    exercises: [
+      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Overhead Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+      { name: 'Pull Ups', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Bicep Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Tricep Pushdown', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+    ],
+  },
+  {
+    id: 'starter_fullbody',
+    name: 'Full Body',
+    exercises: [
+      { name: 'Squat', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
+      { name: 'Overhead Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+      { name: 'Romanian Deadlift', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+    ],
+  },
+];
 
 // ─── NUDGE TYPE ICONS ───────────────────────────────────────────
 import { Flame, BarChart3, Scale, TrendingUp } from 'lucide-react-native';
@@ -253,6 +314,7 @@ export default function LogWorkoutScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [comparisons, setComparisons] = useState({});
   const [overloads, setOverloads] = useState({});
+  const [lastSets, setLastSets] = useState({});
   const [formName, setFormName] = useState('');
   const [formSets, setFormSets] = useState('3');
   const [formReps, setFormReps] = useState('10');
@@ -428,6 +490,8 @@ export default function LogWorkoutScreen({ navigation }) {
       if (suggestion) setOverloads(prev => ({ ...prev, [ex.name]: suggestion }));
       const comp = await compareToLast(ex.name, ex.sets);
       if (comp) setComparisons(prev => ({ ...prev, [ex.name]: comp }));
+      const prev = await getLastSessionSets(ex.name);
+      if (prev) setLastSets(ps => ({ ...ps, [ex.name]: prev }));
     }
   };
 
@@ -469,7 +533,8 @@ export default function LogWorkoutScreen({ navigation }) {
     haptics.tap();
     const cloned = template.exercises.map(ex => ({ name: ex.name, sets: ex.sets.map(s => ({ ...s })) }));
     setExercises(cloned); setLoadedTemplateId(template.id); setCompletedSets({}); setOverloads({});
-    await markTemplateUsed(template.id); loadOverloadForExercises(cloned); loadNotesForExercises(cloned);
+    if (!template.id.startsWith('starter_')) await markTemplateUsed(template.id);
+    loadOverloadForExercises(cloned); loadNotesForExercises(cloned);
   };
 
   const handleDeleteTemplate = (template) => {
@@ -560,6 +625,7 @@ export default function LogWorkoutScreen({ navigation }) {
     });
 
     setSaving(false);
+    scheduleWorkoutReminders().catch(() => {}); // reset inactivity nudge timer
 
     const totalSetsCount = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
     const totalVolume = exercises.reduce((sum, ex) =>
@@ -803,30 +869,59 @@ export default function LogWorkoutScreen({ navigation }) {
             </FadeInView>
           )}
 
-          {templates.length > 0 && exercises.length === 0 && (
+          {exercises.length === 0 && (
             <View style={{ marginBottom: 20 }}>
-              <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: 10 }}>Templates</Text>
-              {templates.map((t, idx) => (
-                <GlassCard
-                  key={t.id}
-                  style={{ padding: 14, flexDirection: 'row', alignItems: 'center' }}
-                >
+              {templates.length > 0 && (
+                <>
+                  <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: 10 }}>My Templates</Text>
+                  {templates.map((t) => (
+                    <GlassCard
+                      key={t.id}
+                      style={{ padding: 14, flexDirection: 'row', alignItems: 'center' }}
+                    >
+                      <TouchableOpacity
+                        style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                        onPress={() => handleLoadTemplate(t)}
+                        onLongPress={() => handleDeleteTemplate(t)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ ...FONT.subhead, fontSize: 15, color: colors.textPrimary }}>{t.name}</Text>
+                          <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>
+                            {t.exercises.length} exercises{t.useCount > 0 ? ` \u00b7 ${t.useCount}\u00d7` : ''}
+                          </Text>
+                        </View>
+                        <Play size={16} color={coach.color} strokeWidth={2.5} />
+                      </TouchableOpacity>
+                    </GlassCard>
+                  ))}
+                  <View style={{ height: 16 }} />
+                </>
+              )}
+              <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: 10 }}>
+                {templates.length > 0 ? 'Programs' : 'Starter Programs'}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingHorizontal: 4, gap: 8, flexDirection: 'row' }}>
+                {STARTER_TEMPLATES.map((t) => (
                   <TouchableOpacity
-                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                    key={t.id}
                     onPress={() => handleLoadTemplate(t)}
-                    onLongPress={() => handleDeleteTemplate(t)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderRadius: RADIUS.md,
+                      borderWidth: 1,
+                      borderColor: colors.glassBorder,
+                      backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+                      minWidth: 120,
+                    }}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ ...FONT.subhead, fontSize: 15, color: colors.textPrimary }}>{t.name}</Text>
-                      <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>
-                        {t.exercises.length} exercises{t.useCount > 0 ? ` \u00b7 ${t.useCount}\u00d7` : ''}
-                      </Text>
-                    </View>
-                    <Play size={16} color={coach.color} strokeWidth={2.5} />
+                    <Text style={{ ...FONT.subhead, fontSize: 14, color: colors.textPrimary, marginBottom: 4 }}>{t.name}</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textMuted }}>{t.exercises.length} exercises</Text>
                   </TouchableOpacity>
-                </GlassCard>
-              ))}
+                ))}
+              </ScrollView>
             </View>
           )}
 
@@ -983,17 +1078,37 @@ export default function LogWorkoutScreen({ navigation }) {
                 ) : null}
 
                 {overload && (
-                  <TouchableOpacity style={{
-                    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                    padding: 8, borderRadius: 8,
-                    backgroundColor: coach.color + '10', borderWidth: 1, borderColor: coach.color + '25', marginBottom: 8,
-                  }} onPress={() => applyOverload(exIndex, overload.suggestedWeight)} activeOpacity={0.7}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <TrendingUp size={12} color={coach.color} strokeWidth={2} />
-                      <Text style={{ ...FONT.caption, color: coach.color }}>Last: {overload.lastWeight} {units}</Text>
+                  <View style={{
+                    padding: 12, borderRadius: 10, marginBottom: 10,
+                    backgroundColor: coach.color + '12', borderWidth: 1.5, borderColor: coach.color + '30',
+                  }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <TrendingUp size={14} color={coach.color} strokeWidth={2} />
+                        <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>
+                          Session {overload.sessionCount} · Last: {overload.lastWeight} {units}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setOverloads(prev => { const next = { ...prev }; delete next[ex.name]; return next; })}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <X size={13} color={colors.textMuted} strokeWidth={2} />
+                      </TouchableOpacity>
                     </View>
-                    <Text style={{ ...FONT.caption, fontWeight: '800', color: coach.color }}>Try {overload.suggestedWeight} {units}</Text>
-                  </TouchableOpacity>
+                    <Text style={{ ...FONT.caption, color: colors.textSecondary, marginBottom: 10 }}>
+                      {({ drill: `Push it. Hit ${overload.suggestedWeight} ${units} today.`, hype: `Time to go heavier! Hit ${overload.suggestedWeight}!`, zen: `${overload.suggestedWeight} ${units} feels right for today.` })[coachId] ?? `Ready for ${overload.suggestedWeight} ${units}?`}
+                    </Text>
+                    <TouchableOpacity
+                      style={{ backgroundColor: coach.color, borderRadius: 8, paddingVertical: 9, alignItems: 'center' }}
+                      onPress={() => applyOverload(exIndex, overload.suggestedWeight)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={{ ...FONT.caption, fontWeight: '800', color: getTextOnColor(coach.color) }}>
+                        Try {overload.suggestedWeight} {units} (+{overload.increase})
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
 
                 {comp && (
@@ -1025,48 +1140,67 @@ export default function LogWorkoutScreen({ navigation }) {
                 {ex.sets.map((set, setIndex) => {
                   const isDone = !!completedSets[`${exIndex}-${setIndex}`];
                   return (
-                    <View key={setIndex} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4, opacity: isDone ? 0.5 : 1 }}>
-                      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                        {isDone ? (
-                          <Check size={13} color={colors.green} strokeWidth={2.5} />
+                    <React.Fragment key={setIndex}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1, opacity: isDone ? 0.5 : 1 }}>
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                          {isDone ? (
+                            <Check size={13} color={colors.green} strokeWidth={2.5} />
+                          ) : (
+                            <Text style={{ ...FONT.caption, fontSize: 13, color: colors.textMuted }}>{setIndex + 1}</Text>
+                          )}
+                        </View>
+                        <TextInput style={{
+                          flex: 1, backgroundColor: isDark ? colors.glassBg : colors.bgInput,
+                          borderRadius: 6, borderWidth: 1, borderColor: colors.glassBorder,
+                          padding: 6, fontSize: 14, color: colors.textPrimary, textAlign: 'center', fontWeight: '600', marginHorizontal: 3,
+                        }} value={String(set.reps)} onChangeText={v => updateSet(exIndex, setIndex, 'reps', v)} keyboardType="number-pad" editable={!isDone} />
+                        <TextInput style={{
+                          flex: 1, backgroundColor: isDark ? colors.glassBg : colors.bgInput,
+                          borderRadius: 6, borderWidth: 1, borderColor: colors.glassBorder,
+                          padding: 6, fontSize: 14, color: colors.textPrimary, textAlign: 'center', fontWeight: '600', marginHorizontal: 3,
+                        }} value={String(set.weight)} onChangeText={v => updateSet(exIndex, setIndex, 'weight', v)} keyboardType="decimal-pad" editable={!isDone} />
+                        {liveMode ? (
+                          <TouchableOpacity style={{
+                            width: 48, paddingVertical: 6, borderRadius: 6,
+                            backgroundColor: isDone ? colors.green + '15' : isDark ? colors.glassBg : colors.bgInput,
+                            borderWidth: 1, borderColor: isDone ? colors.green : colors.glassBorder, alignItems: 'center',
+                            flexDirection: 'row', justifyContent: 'center', gap: 3,
+                          }} onPress={() => handleCompleteSet(exIndex, setIndex)}>
+                            {isDone ? (
+                              <RefreshCw size={10} color={colors.green} strokeWidth={2} />
+                            ) : (
+                              <Check size={10} color={colors.textSecondary} strokeWidth={2} />
+                            )}
+                            <Text style={{ ...FONT.caption, fontSize: 10, color: isDone ? colors.green : colors.textSecondary }}>
+                              {isDone ? 'Undo' : 'Done'}
+                            </Text>
+                          </TouchableOpacity>
                         ) : (
-                          <Text style={{ ...FONT.caption, fontSize: 13, color: colors.textMuted }}>{setIndex + 1}</Text>
+                          <TouchableOpacity onPress={() => removeSet(exIndex, setIndex)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <View style={{ width: 24, alignItems: 'center' }}>
+                              <Minus size={16} color={colors.textDim} strokeWidth={2} />
+                            </View>
+                          </TouchableOpacity>
                         )}
                       </View>
-                      <TextInput style={{
-                        flex: 1, backgroundColor: isDark ? colors.glassBg : colors.bgInput,
-                        borderRadius: 6, borderWidth: 1, borderColor: colors.glassBorder,
-                        padding: 6, fontSize: 14, color: colors.textPrimary, textAlign: 'center', fontWeight: '600', marginHorizontal: 3,
-                      }} value={String(set.reps)} onChangeText={v => updateSet(exIndex, setIndex, 'reps', v)} keyboardType="number-pad" editable={!isDone} />
-                      <TextInput style={{
-                        flex: 1, backgroundColor: isDark ? colors.glassBg : colors.bgInput,
-                        borderRadius: 6, borderWidth: 1, borderColor: colors.glassBorder,
-                        padding: 6, fontSize: 14, color: colors.textPrimary, textAlign: 'center', fontWeight: '600', marginHorizontal: 3,
-                      }} value={String(set.weight)} onChangeText={v => updateSet(exIndex, setIndex, 'weight', v)} keyboardType="decimal-pad" editable={!isDone} />
-                      {liveMode ? (
-                        <TouchableOpacity style={{
-                          width: 48, paddingVertical: 6, borderRadius: 6,
-                          backgroundColor: isDone ? colors.green + '15' : isDark ? colors.glassBg : colors.bgInput,
-                          borderWidth: 1, borderColor: isDone ? colors.green : colors.glassBorder, alignItems: 'center',
-                          flexDirection: 'row', justifyContent: 'center', gap: 3,
-                        }} onPress={() => handleCompleteSet(exIndex, setIndex)}>
-                          {isDone ? (
-                            <RefreshCw size={10} color={colors.green} strokeWidth={2} />
-                          ) : (
-                            <Check size={10} color={colors.textSecondary} strokeWidth={2} />
-                          )}
-                          <Text style={{ ...FONT.caption, fontSize: 10, color: isDone ? colors.green : colors.textSecondary }}>
-                            {isDone ? 'Undo' : 'Done'}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity onPress={() => removeSet(exIndex, setIndex)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <View style={{ width: 24, alignItems: 'center' }}>
-                            <Minus size={16} color={colors.textDim} strokeWidth={2} />
+                      {/* Previous session hint row — aligned under REPS and WEIGHT columns */}
+                      {(() => {
+                        const prevSet = (lastSets[ex.name] || [])[setIndex];
+                        if (!prevSet || (prevSet.weight === 0 && prevSet.reps === 0)) return null;
+                        return (
+                          <View style={{ flexDirection: 'row', marginBottom: 4, paddingHorizontal: 2 }}>
+                            <View style={{ flex: 1 }} />
+                            <Text style={{ flex: 1, textAlign: 'center', fontSize: 10, color: colors.textMuted, fontVariant: ['tabular-nums'] }}>
+                              {prevSet.reps}
+                            </Text>
+                            <Text style={{ flex: 1, textAlign: 'center', fontSize: 10, color: colors.textMuted, fontVariant: ['tabular-nums'] }}>
+                              {prevSet.weight}
+                            </Text>
+                            <View style={{ width: liveMode ? 52 : 28 }} />
                           </View>
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                        );
+                      })()}
+                    </React.Fragment>
                   );
                 })}
                 <TouchableOpacity style={{

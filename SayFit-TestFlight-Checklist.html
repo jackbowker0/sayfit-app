@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SayFit — TestFlight Submission Checklist</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      color: #1a1a1a;
+      background: #fff;
+      padding: 48px;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 13px; margin-bottom: 36px; }
+    h2 {
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #fff;
+      background: #1a1a1a;
+      padding: 8px 14px;
+      border-radius: 6px;
+      margin-bottom: 14px;
+      margin-top: 32px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-num {
+      background: rgba(255,255,255,0.2);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 13px;
+    }
+    .step {
+      border: 1.5px solid #e5e5e5;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+    .step-optional {
+      border: 1.5px solid #d4e8ff;
+      background: #f5f9ff;
+    }
+    .step-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+    .badge-terminal { background: #000; color: #fff; }
+    .badge-website  { background: #0071e3; color: #fff; }
+    .badge-file     { background: #e5e5e5; color: #555; }
+    .badge-optional { background: #0071e3; color: #fff; }
+    .step-desc { color: #444; line-height: 1.65; margin-bottom: 10px; }
+    .step-desc:last-child { margin-bottom: 0; }
+    code {
+      display: block;
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 12.5px;
+      white-space: pre;
+      margin-top: 8px;
+      color: #1a1a1a;
+      overflow-x: auto;
+    }
+    .inline-code {
+      display: inline;
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      font-size: 12.5px;
+    }
+    .note {
+      background: #fffbe6;
+      border: 1px solid #f0d060;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-top: 10px;
+      color: #555;
+      line-height: 1.6;
+    }
+    .note-blue {
+      background: #eef5ff;
+      border: 1px solid #b0cff5;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-top: 10px;
+      color: #2a4a7a;
+      line-height: 1.6;
+    }
+    .checkbox {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .done-section {
+      background: #f0faf4;
+      border: 1.5px solid #a8e0bc;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 14px;
+    }
+    .done-item { color: #2a6644; font-size: 13px; line-height: 1.9; }
+    .done-item::before { content: '✓  '; font-weight: 700; }
+    .divider {
+      text-align: center;
+      color: #bbb;
+      font-size: 12px;
+      margin: 24px 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e5e5;
+      color: #999;
+      font-size: 12px;
+    }
+    @media print {
+      body { padding: 28px; }
+      h2 { break-before: auto; }
+      .step { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>SayFit — TestFlight Submission</h1>
+  <p class="subtitle">Complete in order top to bottom &nbsp;·&nbsp; Estimated total time: ~1 hour</p>
+
+  <!-- ALREADY DONE -->
+  <h2>Already Done — No Action Needed</h2>
+  <div class="done-section">
+    <div class="done-item">Privacy Manifest added to app.json (required by Apple)</div>
+    <div class="done-item">Microphone &amp; speech recognition permissions configured</div>
+    <div class="done-item">Build number set to 1</div>
+    <div class="done-item">Push notification plugin configured</div>
+    <div class="done-item">Voice mic button added to coach workout screen</div>
+    <div class="done-item">expo-speech-recognition installed and wired up</div>
+    <div class="done-item">Bundle ID set: com.sayfit.app</div>
+    <div class="done-item">Apple Sign-In configured</div>
+    <div class="done-item">Icons and splash screen ready</div>
+    <div class="done-item">EAS build profiles configured</div>
+  </div>
+
+  <!-- STEP 1 -->
+  <h2><span class="step-num">1</span> Gather Info from Apple's Website</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Create an App Record in App Store Connect <span class="badge badge-website">Website</span></div>
+    <p class="step-desc">Go to <strong>appstoreconnect.apple.com</strong> → My Apps → click <strong>+</strong> → New App. Fill in:</p>
+    <code>Platform:          iOS
+Name:              SayFit
+Primary Language:  English (U.S.)
+Bundle ID:         com.sayfit.app
+SKU:               sayfit-app-001   (any unique string, doesn't matter)</code>
+    <div class="note">After creating, look at the URL — it will contain a number like <span class="inline-code">appstoreconnect.apple.com/apps/1234567890</span>. Write that number down — you'll need it in Step 4.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Add a Privacy Policy URL <span class="badge badge-website">Website</span></div>
+    <p class="step-desc">In App Store Connect → Your App → App Information, paste a URL into the Privacy Policy field. Apple requires this before you can submit.</p>
+    <div class="note">Don't have one? Go to <strong>privacypolicygenerator.info</strong>, fill out the form, copy the text into a Google Doc, turn on link sharing, and paste that URL here. Takes 5 min.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Find your Apple Team ID <span class="badge badge-website">Website</span></div>
+    <p class="step-desc">Go to <strong>developer.apple.com</strong> → Account → Membership Details. Your Team ID is a 10-character string like <span class="inline-code">A1B2C3D4E5</span>. Write it down — needed in Step 4.</p>
+  </div>
+
+  <!-- STEP 2 -->
+  <h2><span class="step-num">2</span> Get Your Supabase Keys</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Copy your project keys from Supabase <span class="badge badge-website">Website</span></div>
+    <p class="step-desc">Go to <strong>supabase.com</strong> → your project → Settings → API. Copy both values and save them — you'll paste them into the terminal in Step 3.</p>
+    <code>Project URL:   https://xxxxxxxxxxxx.supabase.co
+anon public:   eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...  (long string)</code>
+  </div>
+
+  <!-- STEP 3 -->
+  <h2><span class="step-num">3</span> Terminal — One-Time Setup</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Navigate to the project folder <span class="badge badge-terminal">Terminal</span></div>
+    <code>cd /Users/jackbowker/sayfit-app</code>
+    <p class="step-desc" style="margin-top:8px">Run every terminal command in this folder.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Install EAS CLI and log in <span class="badge badge-terminal">Terminal</span></div>
+    <code>npm install -g eas-cli
+eas login</code>
+    <p class="step-desc" style="margin-top:8px">Log in with your <strong>Expo account</strong>. Create a free one at <strong>expo.dev</strong> if you don't have one.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Link the project to your Expo account <span class="badge badge-terminal">Terminal</span></div>
+    <code>eas init</code>
+    <p class="step-desc" style="margin-top:8px">This automatically fills in the Project ID in app.json. Say yes to any prompts.</p>
+  </div>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Add your Supabase keys as build secrets <span class="badge badge-terminal">Terminal</span></div>
+    <p class="step-desc">Paste your actual values from Step 2 below (replace the placeholder text):</p>
+    <code>eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "https://your-project.supabase.co"
+
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "eyJ..."</code>
+  </div>
+
+  <!-- STEP 4 -->
+  <h2><span class="step-num">4</span> Fill In Your Credentials File</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Open eas.json and fill in your three values <span class="badge badge-file">File</span></div>
+    <p class="step-desc">Open <span class="inline-code">eas.json</span> in the project folder. Find the submit section and replace the empty strings:</p>
+    <code>"submit": {
+  "production": {
+    "ios": {
+      "appleId": "you@icloud.com",      ← your Apple ID email address
+      "ascAppId": "1234567890",         ← the number from App Store Connect URL (Step 1)
+      "appleTeamId": "A1B2C3D4E5"       ← from developer.apple.com Membership (Step 1)
+    }
+  }
+}</code>
+    <p class="step-desc" style="margin-top:10px">Save the file when done.</p>
+  </div>
+
+  <!-- STEP 5 — OPTIONAL DEV BUILD -->
+  <h2><span class="step-num">5</span> (Optional) Test Voice Input Before Submitting</h2>
+
+  <div class="step step-optional">
+    <div class="step-title"><span class="checkbox"></span> Build a development client to test the mic on your phone <span class="badge badge-optional">Optional</span> <span class="badge badge-terminal">Terminal</span></div>
+    <p class="step-desc">The voice mic button requires native iOS code and won't work in Expo Go. Skip this if you're happy to test it in TestFlight. Do this if you want to test it now.</p>
+    <code>eas build --platform ios --profile development</code>
+    <div class="note-blue">EAS will give you a QR code / link when it's done (~15 min). Scan it on your phone to install the dev app. Then start your dev server with:<br><br><span class="inline-code">npx expo start --dev-client</span><br><br>Open the installed app (not Expo Go) and scan the QR code. The mic button will now work.</div>
+  </div>
+
+  <!-- STEP 6 -->
+  <h2><span class="step-num">6</span> Build the Production App</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Run the production build <span class="badge badge-terminal">Terminal</span></div>
+    <p class="step-desc">This sends your code to Expo's servers and compiles the iOS app. Takes about 15–20 minutes. You can close the terminal — you'll get an email when it's done.</p>
+    <code>eas build --platform ios --profile production</code>
+    <div class="note">EAS will ask for your Apple ID password and may send a 2FA code to your phone. It handles certificates and provisioning profiles automatically — just approve what it asks.</div>
+  </div>
+
+  <!-- STEP 7 -->
+  <h2><span class="step-num">7</span> Submit to TestFlight</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Submit the build to Apple <span class="badge badge-terminal">Terminal</span></div>
+    <p class="step-desc">Once the build finishes, run this to send it to TestFlight:</p>
+    <code>eas submit --platform ios --profile production</code>
+    <div class="note">The build appears in App Store Connect → TestFlight within a few minutes. Apple's automated review takes 15–30 min, after which you can invite testers.</div>
+  </div>
+
+  <!-- STEP 8 -->
+  <h2><span class="step-num">8</span> Invite Testers</h2>
+
+  <div class="step">
+    <div class="step-title"><span class="checkbox"></span> Add internal testers in App Store Connect <span class="badge badge-website">Website</span></div>
+    <p class="step-desc">Go to <strong>appstoreconnect.apple.com</strong> → Your App → TestFlight → Internal Testing → Add Testers. Enter each tester's Apple ID email. They'll get an invite and install via the TestFlight app.</p>
+    <div class="note">Internal testers (up to 100 people) get the build immediately with no extra Apple review. External testers (public link) require a short extra review — usually same day.</div>
+  </div>
+
+  <!-- QUICK REF -->
+  <h2>All Terminal Commands — Quick Reference</h2>
+  <div class="step">
+    <code>cd /Users/jackbowker/sayfit-app
+
+# ── One-time setup ──────────────────────────────────────────
+npm install -g eas-cli
+eas login
+eas init
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "YOUR_URL"
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "YOUR_KEY"
+
+# ── Optional: test voice on device before submitting ────────
+eas build --platform ios --profile development
+npx expo start --dev-client   # run this after dev build is installed
+
+# ── Production build + submit ───────────────────────────────
+eas build --platform ios --profile production
+eas submit --platform ios --profile production</code>
+  </div>
+
+  <div class="footer">
+    SayFit &nbsp;·&nbsp; com.sayfit.app &nbsp;·&nbsp; Version 1.0.0 (Build 1) &nbsp;·&nbsp; Includes voice input via expo-speech-recognition
+  </div>
+
+</body>
+</html>

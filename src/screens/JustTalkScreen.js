@@ -9,15 +9,24 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Animated,
 } from 'react-native';
+// expo-speech-recognition requires a native build — not available in Expo Go
+let ExpoSpeechRecognitionModule = null;
+let useSpeechRecognitionEvent = () => {}; // no-op in Expo Go
+try {
+  const SpeechRec = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = SpeechRec.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = SpeechRec.useSpeechRecognitionEvent;
+} catch (_) {}
 import FadeInView from '../components/FadeInView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 import {
   Zap, Flame, Dumbbell, Footprints, Waves, Moon, Sparkles, Target, Mountain,
-  MessageCircle, Swords, RefreshCw, Pencil, Clock, Send, ArrowRight,
+  MessageCircle, Swords, RefreshCw, Pencil, Clock, Send, ArrowRight, Mic,
+  ChevronUp, ChevronDown, X,
 } from 'lucide-react-native';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 
@@ -93,6 +102,65 @@ export default function JustTalkScreen() {
   const [parsed, setParsed] = useState(null);
   const [workout, setWorkout] = useState(null);
   const [profile, setProfile] = useState(null);
+
+  // ─── VOICE INPUT STATE ────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoop = useRef(null);
+
+  useSpeechRecognitionEvent('start', () => setIsListening(true));
+  useSpeechRecognitionEvent('end', () => {
+    setIsListening(false);
+    stopPulse();
+  });
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript ?? '';
+    if (transcript) setInput(transcript);
+  });
+  useSpeechRecognitionEvent('error', () => {
+    setIsListening(false);
+    stopPulse();
+  });
+
+  const startPulse = useCallback(() => {
+    pulseLoop.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    pulseLoop.current.start();
+  }, [pulseAnim]);
+
+  const stopPulse = useCallback(() => {
+    pulseLoop.current?.stop();
+    pulseAnim.setValue(1);
+  }, [pulseAnim]);
+
+  const handleMicPress = useCallback(async () => {
+    if (!ExpoSpeechRecognitionModule) {
+      Alert.alert('Voice unavailable', 'Voice input requires a full app build. It will work in the TestFlight version.');
+      return;
+    }
+    if (isListening) {
+      ExpoSpeechRecognitionModule.stop();
+      stopPulse();
+      return;
+    }
+    try {
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permission needed', 'Please allow microphone access in Settings to use voice input.');
+        return;
+      }
+      setInput('');
+      haptics.tap();
+      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+      startPulse();
+    } catch {
+      Alert.alert('Voice unavailable', 'Voice input requires a full app build. It will work in the TestFlight version.');
+    }
+  }, [isListening, startPulse, stopPulse]);
 
   // ─── BUILD MODE STATE ─────────────────────────────────────────
   const [manualExercises, setManualExercises] = useState([]);
@@ -427,7 +495,7 @@ export default function JustTalkScreen() {
                         disabled={index === 0}
                         accessibilityLabel={`Move ${ex.name} up`}
                       >
-                        <Text style={{ fontSize: 14, color: colors.textMuted }}>▲</Text>
+                        <ChevronUp size={16} color={colors.textMuted} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={{ width: 28, height: 28, justifyContent: 'center', alignItems: 'center', opacity: index === manualExercises.length - 1 ? 0.2 : 0.6 }}
@@ -435,7 +503,7 @@ export default function JustTalkScreen() {
                         disabled={index === manualExercises.length - 1}
                         accessibilityLabel={`Move ${ex.name} down`}
                       >
-                        <Text style={{ fontSize: 14, color: colors.textMuted }}>▼</Text>
+                        <ChevronDown size={16} color={colors.textMuted} />
                       </TouchableOpacity>
                     </View>
 
@@ -448,7 +516,7 @@ export default function JustTalkScreen() {
                       onPress={() => handleRemoveExercise(ex.id)}
                       accessibilityLabel={`Remove ${ex.name}`}
                     >
-                      <Text style={{ fontSize: 14, color: colors.red }}>✕</Text>
+                      <X size={14} color={colors.red} />
                     </TouchableOpacity>
                   </GlassCard>
                 </FadeInView>
@@ -522,17 +590,37 @@ export default function JustTalkScreen() {
           flexDirection: 'row', alignItems: 'flex-end',
           backgroundColor: isDark ? colors.glassBg : colors.bgCard,
           borderRadius: RADIUS.lg,
-          borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
-          paddingLeft: 16, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
+          borderWidth: 1, borderColor: isListening ? coach.color + '60' : (isDark ? colors.glassBorder : colors.border),
+          paddingLeft: 6, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
         }}>
+          {/* Mic button */}
+          <TouchableOpacity
+            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+            onPress={handleMicPress}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={isListening ? 'Stop listening' : 'Start voice input'}
+          >
+            <Animated.View style={{
+              width: 34, height: 34, borderRadius: 17,
+              backgroundColor: isListening ? coach.color + '20' : 'transparent',
+              justifyContent: 'center', alignItems: 'center',
+              transform: [{ scale: pulseAnim }],
+            }}>
+              <Mic size={20} color={isListening ? coach.color : colors.textMuted} />
+            </Animated.View>
+          </TouchableOpacity>
+
           <TextInput
-            style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10 }}
-            placeholder={`"20 min core, I'm feeling tired" or "quick intense leg day"`}
-            placeholderTextColor={colors.textDim}
+            style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10, paddingHorizontal: 4 }}
+            placeholder={isListening ? 'Listening...' : `"20 min core, I'm feeling tired" or "quick intense leg day"`}
+            placeholderTextColor={isListening ? coach.color : colors.textDim}
             value={input} onChangeText={setInput} multiline maxLength={200}
             returnKeyType="send" onSubmitEditing={() => handleGenerate()} blurOnSubmit
             accessibilityLabel="Describe your ideal workout"
           />
+
+          {/* Send button */}
           <TouchableOpacity
             style={{
               width: 44, height: 44, borderRadius: RADIUS.md,

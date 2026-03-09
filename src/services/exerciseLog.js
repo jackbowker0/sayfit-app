@@ -324,6 +324,16 @@ export async function getExerciseHistory(exerciseName) {
   return sessions.sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
+/**
+ * Get the sets array from the most recent session for an exercise.
+ * Returns an array of { reps, weight } or null if no history.
+ */
+export async function getLastSessionSets(exerciseName) {
+  const history = await getExerciseHistory(exerciseName);
+  if (history.length === 0) return null;
+  return history[history.length - 1].sets;
+}
+
 export async function compareToLast(exerciseName, currentSets) {
   const history = await getExerciseHistory(exerciseName);
   if (history.length === 0) return null;
@@ -496,6 +506,55 @@ function parseSingleExercise(text) {
   }
 
   return { name, sets: setsArray };
+}
+
+// ---- TIME-BASED EXERCISE TRACKING (bodyweight / guided workouts) ----
+
+const DURATION_LOG_KEY = 'sayfit_duration_log';
+
+export async function saveExerciseDurations(exercises) {
+  try {
+    const raw = await AsyncStorage.getItem(DURATION_LOG_KEY);
+    const log = raw ? JSON.parse(raw) : [];
+    const date = new Date().toISOString();
+    for (const ex of exercises) {
+      if (ex.name && ex.duration > 0) {
+        log.push({
+          name: normalizeExerciseName(ex.name),
+          displayName: ex.name,
+          duration: ex.duration,
+          date,
+        });
+      }
+    }
+    if (log.length > 500) log.splice(0, log.length - 500);
+    await AsyncStorage.setItem(DURATION_LOG_KEY, JSON.stringify(log));
+  } catch (e) {
+    console.warn('[ExerciseLog] Failed to save durations:', e);
+  }
+}
+
+export async function getTimeOverloadSuggestion(exerciseName) {
+  try {
+    const raw = await AsyncStorage.getItem(DURATION_LOG_KEY);
+    const log = raw ? JSON.parse(raw) : [];
+    const name = normalizeExerciseName(exerciseName);
+    const history = log
+      .filter(e => e.name === name)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (history.length < 2) return null;
+    const lastDuration = history[history.length - 1].duration;
+    const recentSame = history.slice(-3).filter(h => h.duration === lastDuration).length;
+    const increase = recentSame >= 3 ? 10 : 5;
+    return {
+      lastDuration,
+      suggestedDuration: lastDuration + increase,
+      increase,
+      sessionCount: history.length,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ---- HELPERS ----

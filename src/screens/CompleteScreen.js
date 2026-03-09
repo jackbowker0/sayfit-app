@@ -22,6 +22,7 @@ import { COACHES } from '../constants/coaches';
 import { useTheme } from '../hooks/useTheme';
 import { formatTime } from '../utils/helpers';
 import { saveWorkout, invalidateMemoryCache, buildMemorySummary } from '../services/storage';
+import { getOverloadSuggestion, saveExerciseDurations, getTimeOverloadSuggestion } from '../services/exerciseLog';
 import { checkAchievements, TIER_CONFIG } from '../services/achievements';
 import { getUserProfile } from '../services/userProfile';
 import * as haptics from '../services/haptics';
@@ -275,6 +276,8 @@ export default function CompleteScreen({ navigation, route }) {
   const [streak, setStreak] = useState(0);
   const [newAchievements, setNewAchievements] = useState([]);
   const [showConfetti, setShowConfetti] = useState(true);
+  const [overloadSuggestions, setOverloadSuggestions] = useState([]);
+  const [timeOverloadSuggestions, setTimeOverloadSuggestions] = useState([]);
 
   useEffect(() => {
     haptics.heavy();
@@ -298,6 +301,18 @@ export default function CompleteScreen({ navigation, route }) {
               source: generatedWorkout ? 'justTalk' : 'coach',
               workoutType: generatedWorkout?.focus || 'general',
             });
+
+            // Save per-exercise durations for progressive overload tracking
+            const mainExercises = guidedExercises.filter(e => e.phase === 'main');
+            if (mainExercises.length > 0) {
+              await saveExerciseDurations(mainExercises);
+              const timeSugs = [];
+              for (const ex of mainExercises.slice(0, 5)) {
+                const s = await getTimeOverloadSuggestion(ex.name);
+                if (s) timeSugs.push({ name: ex.name, ...s });
+              }
+              if (timeSugs.length > 0) setTimeOverloadSuggestions(timeSugs.slice(0, 3));
+            }
           }
 
           invalidateMemoryCache();
@@ -331,6 +346,16 @@ export default function CompleteScreen({ navigation, route }) {
             earned.forEach((_, i) => {
               setTimeout(() => haptics.tap(), 1400 + i * 250);
             });
+          }
+
+          // Load progressive overload suggestions for logged workouts
+          if (isLoggedWorkout && logData.exercises?.length > 0) {
+            const suggestions = [];
+            for (const ex of logData.exercises) {
+              const s = await getOverloadSuggestion(ex.name);
+              if (s) suggestions.push({ name: ex.name, ...s });
+            }
+            if (suggestions.length > 0) setOverloadSuggestions(suggestions);
           }
         } catch (e) {
           console.warn('[Complete] Failed to save workout:', e);
@@ -422,6 +447,37 @@ export default function CompleteScreen({ navigation, route }) {
           )}
         </View>
 
+        {!isLoggedWorkout && timeOverloadSuggestions.length > 0 && (
+          <GlassCard accentColor={coach.color} fadeDelay={1200} style={{ width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              {CoachIcon && <CoachIcon size={15} color={coach.color} />}
+              <Text style={{ ...FONT.label, color: coach.color }}>
+                {{ drill: 'NEXT SESSION', hype: 'LEVEL UP PLAN', zen: 'Next Practice' }[coachId] || 'NEXT SESSION'}
+              </Text>
+            </View>
+            {timeOverloadSuggestions.map((s, i) => (
+              <View key={s.name} style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingVertical: 10,
+                borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border,
+              }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ ...FONT.body, fontWeight: '600', color: colors.textPrimary }}>{s.name}</Text>
+                  <Text style={{ ...FONT.caption, color: colors.textMuted }}>Last: {s.lastDuration}s</Text>
+                </View>
+                <View style={{
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+                  backgroundColor: coach.color + '15', borderWidth: 1, borderColor: coach.color + '30',
+                }}>
+                  <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>
+                    Try {s.suggestedDuration}s (+{s.increase}s)
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </GlassCard>
+        )}
+
         {newPRs.length > 0 && (
           <GlassCard accentColor={colors.orange} glow fadeDelay={1200} style={{ width: '100%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -443,6 +499,37 @@ export default function CompleteScreen({ navigation, route }) {
                   <Text style={{ ...FONT.body, fontWeight: '700', color: colors.textPrimary }}>{pr.exercise}</Text>
                   <Text style={{ ...FONT.caption, color: colors.orange }}>
                     {pr.old > 0 ? `${pr.old} → ` : ''}{pr.new} {units}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </GlassCard>
+        )}
+
+        {overloadSuggestions.length > 0 && (
+          <GlassCard accentColor={coach.color} fadeDelay={1300} style={{ width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              {CoachIcon && <CoachIcon size={15} color={coach.color} />}
+              <Text style={{ ...FONT.label, color: coach.color }}>
+                {{ drill: 'NEXT SESSION', hype: 'LEVEL UP PLAN', zen: 'Next Practice' }[coachId] || 'NEXT SESSION'}
+              </Text>
+            </View>
+            {overloadSuggestions.map((s, i) => (
+              <View key={s.name} style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingVertical: 10,
+                borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border,
+              }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ ...FONT.body, fontWeight: '600', color: colors.textPrimary }}>{s.name}</Text>
+                  <Text style={{ ...FONT.caption, color: colors.textMuted }}>Last: {s.lastWeight} {units}</Text>
+                </View>
+                <View style={{
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+                  backgroundColor: coach.color + '15', borderWidth: 1, borderColor: coach.color + '30',
+                }}>
+                  <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>
+                    Try {s.suggestedWeight} {units} (+{s.increase})
                   </Text>
                 </View>
               </View>

@@ -5,14 +5,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl, useWindowDimensions,
 } from 'react-native';
+import Svg, { Polyline, Circle, Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import FadeInView from '../components/FadeInView';
 import {
-  Scale, ChevronLeft, TrendingUp, TrendingDown, ArrowDown, ArrowUp,
+  Scale, ChevronLeft, TrendingUp, TrendingDown,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -30,6 +31,7 @@ export default function WeightScreen({ navigation }) {
   const { coachId } = useWorkoutContext();
   const coach = COACHES[coachId];
   const { colors, isDark } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
 
   const [entries, setEntries] = useState([]);
   const [input, setInput] = useState('');
@@ -192,40 +194,58 @@ export default function WeightScreen({ navigation }) {
 
             {/* Chart */}
             {filtered.length > 1 && (
-              <GlassCard fadeDelay={350} accentColor={coach.color}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 2 }}>
-                  {filtered.slice(-20).map((entry, i) => {
-                    const chartMin = min - 2;
-                    const chartMax = max + 2;
-                    const pct = ((entry.weight - chartMin) / (chartMax - chartMin)) * 100;
-                    const isLast = i === filtered.slice(-20).length - 1;
-                    return (
-                      <View key={entry.id} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-                        <View style={{
-                          width: '80%', borderRadius: 3, minHeight: 4,
-                          height: `${Math.max(pct, 5)}%`,
-                          backgroundColor: isLast ? coach.color : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'),
-                          ...(isLast && isDark ? {
-                            shadowColor: coach.color,
-                            shadowOffset: { width: 0, height: 0 },
-                            shadowOpacity: 0.4,
-                            shadowRadius: GLOW.sm,
-                          } : {}),
-                        }} />
-                      </View>
-                    );
-                  })}
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <ArrowDown size={10} color={colors.textMuted} strokeWidth={2} />
-                    <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted }}>Low: {min} {units}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <ArrowUp size={10} color={colors.textMuted} strokeWidth={2} />
-                    <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted }}>High: {max} {units}</Text>
-                  </View>
-                </View>
+              <GlassCard fadeDelay={350} accentColor={coach.color} style={{ marginBottom: SPACING.md }}>
+                {(() => {
+                  const pts = filtered.slice(-40);
+                  const minW = Math.min(...pts.map(p => p.weight));
+                  const maxW = Math.max(...pts.map(p => p.weight));
+                  const svgW = windowWidth - 72;
+                  const svgH = 150;
+                  const padT = 20, padB = 28, padL = 38, padR = 12;
+                  const drawW = svgW - padL - padR;
+                  const drawH = svgH - padT - padB;
+                  const span = maxW - minW || 1;
+                  const toX = i => padL + (i / Math.max(pts.length - 1, 1)) * drawW;
+                  const toY = w => padT + (1 - (w - minW) / span) * drawH;
+                  const linePoints = pts.map((p, i) => `${toX(i).toFixed(1)},${toY(p.weight).toFixed(1)}`).join(' ');
+                  const bottomY = svgH - padB;
+                  const areaPath = [
+                    `M ${toX(0).toFixed(1)},${toY(pts[0].weight).toFixed(1)}`,
+                    ...pts.map((p, i) => `L ${toX(i).toFixed(1)},${toY(p.weight).toFixed(1)}`),
+                    `L ${toX(pts.length - 1).toFixed(1)},${bottomY} L ${toX(0).toFixed(1)},${bottomY} Z`,
+                  ].join(' ');
+                  const fmtDate = d => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  const showDots = pts.length <= 25;
+                  return (
+                    <Svg width={svgW} height={svgH}>
+                      <Defs>
+                        <LinearGradient id="wgrad" x1="0" y1="0" x2="0" y2="1">
+                          <Stop offset="0" stopColor={coach.color} stopOpacity="0.2" />
+                          <Stop offset="1" stopColor={coach.color} stopOpacity="0" />
+                        </LinearGradient>
+                      </Defs>
+                      <Line x1={padL} y1={padT} x2={padL} y2={svgH - padB}
+                        stroke={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" />
+                      <Line x1={padL} y1={padT + drawH / 2} x2={svgW - padR} y2={padT + drawH / 2}
+                        stroke={isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} strokeWidth="1" strokeDasharray="4,3" />
+                      <Path d={areaPath} fill="url(#wgrad)" />
+                      <Polyline points={linePoints} stroke={coach.color} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+                      {showDots && pts.map((p, i) => {
+                        const isLast = i === pts.length - 1;
+                        return (
+                          <Circle key={i} cx={toX(i)} cy={toY(p.weight)}
+                            r={isLast ? 5 : 3}
+                            fill={isLast ? coach.color : colors.glassBg}
+                            stroke={coach.color} strokeWidth={isLast ? 0 : 1.5} />
+                        );
+                      })}
+                      <SvgText x={padL - 4} y={toY(maxW) + 4} fill={colors.textMuted} fontSize="10" textAnchor="end">{maxW}</SvgText>
+                      <SvgText x={padL - 4} y={toY(minW) + 4} fill={colors.textMuted} fontSize="10" textAnchor="end">{minW}</SvgText>
+                      <SvgText x={padL} y={svgH - 6} fill={colors.textMuted} fontSize="9" textAnchor="start">{fmtDate(pts[0].date)}</SvgText>
+                      <SvgText x={svgW - padR} y={svgH - 6} fill={colors.textMuted} fontSize="9" textAnchor="end">{fmtDate(pts[pts.length - 1].date)}</SvgText>
+                    </Svg>
+                  );
+                })()}
               </GlassCard>
             )}
 

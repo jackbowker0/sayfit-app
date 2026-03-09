@@ -11,6 +11,21 @@ module.exports = {
       'expo-localization',
       'expo-apple-authentication',
       'expo-web-browser',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/icon.png',
+          color: '#0A0A0F',
+          sounds: [],
+        },
+      ],
+      [
+        'expo-speech-recognition',
+        {
+          microphonePermission: 'Allow SayFit to use the microphone so you can describe your workout by voice.',
+          speechRecognitionPermission: 'Allow SayFit to recognize your speech so you can request workouts hands-free.',
+        },
+      ],
     ],
     extra: {
       ...(appJson.expo.extra ?? {}),
