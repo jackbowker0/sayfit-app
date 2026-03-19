@@ -14,6 +14,8 @@
 import { COACHES, getFallbackResponse } from '../constants/coaches';
 import { buildMemorySummary, buildCoachMemoryString } from './storage';
 import { getUserProfile, buildProfilePromptString } from './userProfile';
+import { buildRecoveryPromptString } from './recovery';
+import { buildOverloadPromptString } from './progressiveOverload';
 
 // ---- CONFIGURATION ----
 // Replace with your actual Supabase project URL
@@ -77,7 +79,7 @@ export async function getCoachResponse(coachId, command, context = {}) {
   }
 
   try {
-    const prompt = buildPrompt(coach, coachId, command, context, memory, profile);
+    const prompt = await buildPrompt(coach, coachId, command, context, memory, profile);
 
     const response = await fetch(COACH_ENDPOINT, {
       method: 'POST',
@@ -117,7 +119,7 @@ export async function getCoachResponse(coachId, command, context = {}) {
 /**
  * Build the prompt with memory + profile context
  */
-function buildPrompt(coach, coachId, command, context, memory, profile) {
+async function buildPrompt(coach, coachId, command, context, memory, profile) {
   const {
     exerciseName = 'the exercise',
     exerciseIntensity = 7,
@@ -141,11 +143,15 @@ function buildPrompt(coach, coachId, command, context, memory, profile) {
 
   const memoryString = buildCoachMemoryString(coachId, memory);
   const profileString = buildProfilePromptString(profile);
+  const recoveryString = await buildRecoveryPromptString();
+  const overloadString = await buildOverloadPromptString();
 
   return `${coach.personality}
 
 ${profileString ? `WHO YOU'RE COACHING:\n${profileString}\n` : ''}
 ${memoryString ? `WHAT YOU REMEMBER ABOUT THEM:\n${memoryString}\n` : ''}
+${recoveryString ? `${recoveryString}\n` : ''}
+${overloadString ? `${overloadString}\n` : ''}
 You are coaching someone through a workout. Here's the current situation:
 - Current exercise: ${exerciseName} (intensity ${exerciseIntensity}/10)
 - Progress: ${exercisesCompleted}/${totalExercises} exercises done

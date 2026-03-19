@@ -9,23 +9,16 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Animated,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-// expo-speech-recognition requires a native build — not available in Expo Go
-let ExpoSpeechRecognitionModule = null;
-let useSpeechRecognitionEvent = () => {}; // no-op in Expo Go
-try {
-  const SpeechRec = require('expo-speech-recognition');
-  ExpoSpeechRecognitionModule = SpeechRec.ExpoSpeechRecognitionModule;
-  useSpeechRecognitionEvent = SpeechRec.useSpeechRecognitionEvent;
-} catch (_) {}
 import FadeInView from '../components/FadeInView';
+import MicButton from '../components/MicButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 import {
   Zap, Flame, Dumbbell, Footprints, Waves, Moon, Sparkles, Target, Mountain,
-  MessageCircle, Swords, RefreshCw, Pencil, Clock, Send, ArrowRight, Mic,
+  MessageCircle, Swords, RefreshCw, Pencil, Clock, Send, ArrowRight,
   ChevronUp, ChevronDown, X,
 } from 'lucide-react-native';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
@@ -44,6 +37,7 @@ import ExerciseSearch from '../components/ExerciseSearch';
 import GlassCard from '../components/GlassCard';
 import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
+import { getReadySummary, saveReadinessCheckIn, getRecentReadiness } from '../services/recovery';
 
 // ─── PRESETS BY FITNESS LEVEL ─────────────────────────────────────
 
@@ -105,62 +99,22 @@ export default function JustTalkScreen() {
 
   // ─── VOICE INPUT STATE ────────────────────────────────────────
   const [isListening, setIsListening] = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseLoop = useRef(null);
+  const [partialTranscript, setPartialTranscript] = useState('');
 
-  useSpeechRecognitionEvent('start', () => setIsListening(true));
-  useSpeechRecognitionEvent('end', () => {
+  const handleVoiceTranscript = useCallback((transcript) => {
+    setInput(transcript);
+    setPartialTranscript('');
     setIsListening(false);
-    stopPulse();
-  });
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript ?? '';
-    if (transcript) setInput(transcript);
-  });
-  useSpeechRecognitionEvent('error', () => {
-    setIsListening(false);
-    stopPulse();
-  });
+  }, []);
 
-  const startPulse = useCallback(() => {
-    pulseLoop.current = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.25, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ])
-    );
-    pulseLoop.current.start();
-  }, [pulseAnim]);
+  const handleVoicePartial = useCallback((text) => {
+    setPartialTranscript(text);
+    setIsListening(true);
+  }, []);
 
-  const stopPulse = useCallback(() => {
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-  }, [pulseAnim]);
-
-  const handleMicPress = useCallback(async () => {
-    if (!ExpoSpeechRecognitionModule) {
-      Alert.alert('Voice unavailable', 'Voice input requires a full app build. It will work in the TestFlight version.');
-      return;
-    }
-    if (isListening) {
-      ExpoSpeechRecognitionModule.stop();
-      stopPulse();
-      return;
-    }
-    try {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!granted) {
-        Alert.alert('Permission needed', 'Please allow microphone access in Settings to use voice input.');
-        return;
-      }
-      setInput('');
-      haptics.tap();
-      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
-      startPulse();
-    } catch {
-      Alert.alert('Voice unavailable', 'Voice input requires a full app build. It will work in the TestFlight version.');
-    }
-  }, [isListening, startPulse, stopPulse]);
+  // ─── RECOVERY STATE ──────────────────────────────────────────
+  const [recoverySummary, setRecoverySummary] = useState(null);
+  const [energy, setEnergy] = useState(null); // 1-10 readiness
 
   // ─── BUILD MODE STATE ─────────────────────────────────────────
   const [manualExercises, setManualExercises] = useState([]);
@@ -168,6 +122,19 @@ export default function JustTalkScreen() {
 
   useEffect(() => {
     getUserProfile().then(p => setProfile(p));
+    getReadySummary().then(s => {
+      // Only show if there's actual recovery data (not all fresh)
+      if (s.all.some(m => m.lastTrained)) setRecoverySummary(s);
+    });
+    getRecentReadiness().then(r => {
+      if (r) setEnergy(r.energy);
+    });
+  }, []);
+
+  const handleEnergySelect = useCallback((level) => {
+    haptics.tap();
+    setEnergy(level);
+    saveReadinessCheckIn(level);
   }, []);
 
   // Handle "Do Again" from Dashboard/Calendar
@@ -585,36 +552,42 @@ export default function JustTalkScreen() {
           )}
         </View>
 
-        {/* Input */}
+        {/* Mic Button — Primary Input */}
+        <MicButton
+          onTranscript={handleVoiceTranscript}
+          onPartial={handleVoicePartial}
+          coachColor={coach.color}
+          size="large"
+          disabled={generating}
+          style={{ marginBottom: 16 }}
+        />
+
+        {/* Partial transcript preview */}
+        {partialTranscript ? (
+          <View style={{
+            backgroundColor: isDark ? colors.glassBg : colors.bgCard,
+            borderRadius: RADIUS.md, paddingHorizontal: 14, paddingVertical: 10,
+            borderWidth: 1, borderColor: coach.color + '30',
+            marginBottom: 16, alignItems: 'center',
+          }}>
+            <Text style={{ ...FONT.body, color: coach.color, fontStyle: 'italic' }}>
+              "{partialTranscript}"
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Text Input + Send (secondary) */}
         <View style={{
           flexDirection: 'row', alignItems: 'flex-end',
           backgroundColor: isDark ? colors.glassBg : colors.bgCard,
           borderRadius: RADIUS.lg,
-          borderWidth: 1, borderColor: isListening ? coach.color + '60' : (isDark ? colors.glassBorder : colors.border),
-          paddingLeft: 6, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
+          borderWidth: 1, borderColor: isDark ? colors.glassBorder : colors.border,
+          paddingLeft: 14, paddingRight: 6, paddingVertical: 6, marginBottom: 20,
         }}>
-          {/* Mic button */}
-          <TouchableOpacity
-            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
-            onPress={handleMicPress}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={isListening ? 'Stop listening' : 'Start voice input'}
-          >
-            <Animated.View style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: isListening ? coach.color + '20' : 'transparent',
-              justifyContent: 'center', alignItems: 'center',
-              transform: [{ scale: pulseAnim }],
-            }}>
-              <Mic size={20} color={isListening ? coach.color : colors.textMuted} />
-            </Animated.View>
-          </TouchableOpacity>
-
           <TextInput
-            style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10, paddingHorizontal: 4 }}
-            placeholder={isListening ? 'Listening...' : `"20 min core, I'm feeling tired" or "quick intense leg day"`}
-            placeholderTextColor={isListening ? coach.color : colors.textDim}
+            style={{ flex: 1, color: colors.textPrimary, fontSize: 16, minHeight: 44, maxHeight: 100, paddingVertical: 10, paddingHorizontal: 0 }}
+            placeholder={`Or type: "20 min core, I'm tired"`}
+            placeholderTextColor={colors.textDim}
             value={input} onChangeText={setInput} multiline maxLength={200}
             returnKeyType="send" onSubmitEditing={() => handleGenerate()} blurOnSubmit
             accessibilityLabel="Describe your ideal workout"
@@ -634,6 +607,77 @@ export default function JustTalkScreen() {
             <Send size={18} color={input.trim() && !generating ? getTextOnColor(coach.color) : colors.textDim} />
           </TouchableOpacity>
         </View>
+
+        {/* Energy Check-in */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={{ ...FONT.label, color: colors.textDim, marginBottom: 8 }}>HOW'S YOUR ENERGY?</Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {[
+              { level: 3, label: 'Low', emoji: '😴' },
+              { level: 6, label: 'Medium', emoji: '👍' },
+              { level: 9, label: 'High', emoji: '🔥' },
+            ].map(opt => {
+              const isSelected = energy === opt.level;
+              return (
+                <TouchableOpacity
+                  key={opt.level}
+                  style={{
+                    flex: 1, paddingVertical: 10, borderRadius: RADIUS.md,
+                    backgroundColor: isSelected ? coach.color + '18' : (isDark ? colors.glassBg : colors.bgCard),
+                    borderWidth: 1,
+                    borderColor: isSelected ? coach.color + '40' : (isDark ? colors.glassBorder : colors.border),
+                    alignItems: 'center', gap: 2,
+                  }}
+                  onPress={() => handleEnergySelect(opt.level)}
+                  accessibilityLabel={`Energy level: ${opt.label}`}
+                >
+                  <Text style={{ fontSize: 18 }}>{opt.emoji}</Text>
+                  <Text style={{
+                    ...FONT.caption,
+                    color: isSelected ? coach.color : colors.textMuted,
+                    fontWeight: isSelected ? '700' : '500',
+                  }}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Recovery Status */}
+        {recoverySummary && (
+          <View style={{ marginBottom: 16 }}>
+            <Text style={{ ...FONT.label, color: colors.textDim, marginBottom: 8 }}>MUSCLE RECOVERY</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {recoverySummary.all.filter(m => m.lastTrained).map(m => {
+                const recoveryColor = m.recovery >= 80 ? colors.green
+                  : m.recovery >= 50 ? colors.orange
+                  : colors.red;
+                return (
+                  <View
+                    key={m.muscle}
+                    style={{
+                      paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm,
+                      backgroundColor: recoveryColor + '12',
+                      borderWidth: 1, borderColor: recoveryColor + '25',
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    <View style={{
+                      width: 6, height: 6, borderRadius: 3,
+                      backgroundColor: recoveryColor,
+                    }} />
+                    <Text style={{ ...FONT.caption, color: recoveryColor, fontWeight: '600' }}>
+                      {m.muscle}
+                    </Text>
+                    <Text style={{ ...FONT.caption, color: recoveryColor, opacity: 0.7 }}>
+                      {m.recovery}%
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Divider */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>

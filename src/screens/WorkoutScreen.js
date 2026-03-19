@@ -28,6 +28,7 @@ import ExerciseGuide from '../components/ExerciseGuide';
 import { capture } from '../services/posthog';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
+import MicButton from '../components/MicButton';
 import * as tts from '../services/tts';
 
 const VOICE_COMMANDS = [
@@ -170,6 +171,38 @@ export default function WorkoutScreen({ navigation }) {
   const voiceEnabled = isActive && !isPaused;
   const { isListening, transcript } = useVoice(handleCommand, voiceEnabled);
   const cmdEnabled = (cmd) => { if (cmd === 'pause') return true; if (isPaused) return false; if (cmd === 'skip') return true; return isActive; };
+
+  // ─── MIC BUTTON: Map spoken text to commands ───────────────
+  const [micTranscript, setMicTranscript] = useState('');
+
+  const handleMicTranscript = useCallback((text) => {
+    const lower = text.toLowerCase().trim();
+    setMicTranscript('');
+
+    // Match spoken words to known commands
+    const commandMap = [
+      { keywords: ['harder', 'hard', 'more', 'intense', 'heavier'], cmd: 'harder' },
+      { keywords: ['easier', 'easy', 'lighter', 'less'], cmd: 'easier' },
+      { keywords: ['swap', 'switch', 'change', 'different'], cmd: 'swap' },
+      { keywords: ['skip', 'next'], cmd: 'skip' },
+      { keywords: ['tired', 'exhausted', 'done', 'gassed'], cmd: 'tired' },
+      { keywords: ['pause', 'stop', 'wait', 'hold'], cmd: 'pause' },
+    ];
+
+    for (const { keywords, cmd } of commandMap) {
+      if (keywords.some(k => lower.includes(k)) && cmdEnabled(cmd)) {
+        handleCommand(cmd);
+        return;
+      }
+    }
+
+    // No match — show what was heard in the chat
+    sendCommand('chat', `"${text}"`, getFallbackResponse(coachId, 'start'));
+  }, [handleCommand, cmdEnabled, sendCommand, coachId]);
+
+  const handleMicPartial = useCallback((text) => {
+    setMicTranscript(text);
+  }, []);
 
   const handleEnd = () => {
     Alert.alert('End Workout?', 'Are you sure you want to stop?', [
@@ -427,21 +460,24 @@ export default function WorkoutScreen({ navigation }) {
             </View>
           ))}
         </ScrollView>
-        {transcript ? (
+        {(transcript || micTranscript) ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.glassBg, borderTopWidth: 1, borderColor: colors.glassBorder }}>
-            <Mic size={12} color={colors.textMuted} />
-            <Text style={{ ...FONT.caption, color: colors.textMuted }}>{transcript}</Text>
+            <Mic size={12} color={coach.color} />
+            <Text style={{ ...FONT.caption, color: coach.color }}>{micTranscript || transcript}</Text>
           </View>
         ) : null}
       </View>
 
       {/* Commands */}
       <View style={{ marginTop: 'auto' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
-          {isListening && <Mic size={12} color={coach.color} />}
-          <Text style={{ ...FONT.label, fontSize: 10, color: colors.textDim, textAlign: 'center' }}>
-            {isListening ? 'Listening...' : isResting ? 'Rest — tap Skip to move on' : isTransitioning ? 'Get ready...' : 'Tap a command below'}
-          </Text>
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <MicButton
+            onTranscript={handleMicTranscript}
+            onPartial={handleMicPartial}
+            coachColor={coach.color}
+            size="small"
+            disabled={isPaused}
+          />
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
           {VOICE_COMMANDS.map(vc => {

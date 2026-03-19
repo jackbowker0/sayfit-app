@@ -23,6 +23,8 @@ import { useTheme } from '../hooks/useTheme';
 import { formatTime } from '../utils/helpers';
 import { saveWorkout, invalidateMemoryCache, buildMemorySummary } from '../services/storage';
 import { getOverloadSuggestion, saveExerciseDurations, getTimeOverloadSuggestion } from '../services/exerciseLog';
+import { recordMuscleLoad } from '../services/recovery';
+import { analyzeAllExercises, getDeloadMessage, getStallMessage, getIncreaseMessage } from '../services/progressiveOverload';
 import { checkAchievements, TIER_CONFIG } from '../services/achievements';
 import { getUserProfile } from '../services/userProfile';
 import * as haptics from '../services/haptics';
@@ -278,6 +280,7 @@ export default function CompleteScreen({ navigation, route }) {
   const [showConfetti, setShowConfetti] = useState(true);
   const [overloadSuggestions, setOverloadSuggestions] = useState([]);
   const [timeOverloadSuggestions, setTimeOverloadSuggestions] = useState([]);
+  const [overloadAnalysis, setOverloadAnalysis] = useState(null);
 
   useEffect(() => {
     haptics.heavy();
@@ -301,6 +304,12 @@ export default function CompleteScreen({ navigation, route }) {
               source: generatedWorkout ? 'justTalk' : 'coach',
               workoutType: generatedWorkout?.focus || 'general',
             });
+
+            // Record muscle fatigue for recovery tracking
+            const avgIntensity = guidedExercises.length > 0
+              ? Math.round(guidedExercises.reduce((s, e) => s + (e.intensity || 5), 0) / guidedExercises.length)
+              : 5;
+            await recordMuscleLoad(muscles, avgIntensity, generatedWorkout?.energyLevel || null);
 
             // Save per-exercise durations for progressive overload tracking
             const mainExercises = guidedExercises.filter(e => e.phase === 'main');
@@ -356,6 +365,16 @@ export default function CompleteScreen({ navigation, route }) {
               if (s) suggestions.push({ name: ex.name, ...s });
             }
             if (suggestions.length > 0) setOverloadSuggestions(suggestions);
+          }
+
+          // Run full progressive overload analysis (stalls, deloads, increases)
+          try {
+            const analysis = await analyzeAllExercises();
+            if (analysis.increases.length > 0 || analysis.stalls.length > 0 || analysis.needsDeload) {
+              setOverloadAnalysis(analysis);
+            }
+          } catch (e) {
+            console.warn('[Complete] Overload analysis failed:', e);
           }
         } catch (e) {
           console.warn('[Complete] Failed to save workout:', e);
@@ -532,6 +551,61 @@ export default function CompleteScreen({ navigation, route }) {
                     Try {s.suggestedWeight} {units} (+{s.increase})
                   </Text>
                 </View>
+              </View>
+            ))}
+          </GlassCard>
+        )}
+
+        {/* Deload Recommendation */}
+        {overloadAnalysis?.needsDeload && (
+          <GlassCard accentColor={colors.orange} glow fadeDelay={1350} style={{ width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {CoachIcon && <CoachIcon size={15} color={colors.orange} />}
+              <Text style={{ ...FONT.label, color: colors.orange }}>DELOAD WEEK RECOMMENDED</Text>
+            </View>
+            <Text style={{ ...FONT.body, color: colors.textSecondary, lineHeight: 20 }}>
+              {getDeloadMessage(coachId)}
+            </Text>
+          </GlassCard>
+        )}
+
+        {/* Stall Warnings */}
+        {overloadAnalysis && !overloadAnalysis.needsDeload && overloadAnalysis.stalls.length > 0 && (
+          <GlassCard accentColor={colors.orange} fadeDelay={1350} style={{ width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {CoachIcon && <CoachIcon size={15} color={colors.orange} />}
+              <Text style={{ ...FONT.label, color: colors.orange }}>PLATEAU ALERT</Text>
+            </View>
+            {overloadAnalysis.stalls.slice(0, 3).map((s, i) => (
+              <View key={s.name} style={{
+                paddingVertical: 8,
+                borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border,
+              }}>
+                <Text style={{ ...FONT.body, color: colors.textSecondary, lineHeight: 20 }}>
+                  {getStallMessage(coachId, s.name, s.weeksAtWeight)}
+                </Text>
+              </View>
+            ))}
+          </GlassCard>
+        )}
+
+        {/* Weight Increase Ready */}
+        {overloadAnalysis && overloadAnalysis.increases.length > 0 && (
+          <GlassCard accentColor={colors.green} fadeDelay={1350} style={{ width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {CoachIcon && <CoachIcon size={15} color={colors.green} />}
+              <Text style={{ ...FONT.label, color: colors.green }}>
+                {{ drill: 'MOVE UP', hype: 'LEVEL UP TIME', zen: 'Ready to Progress' }[coachId] || 'READY TO INCREASE'}
+              </Text>
+            </View>
+            {overloadAnalysis.increases.slice(0, 3).map((s, i) => (
+              <View key={s.name} style={{
+                paddingVertical: 8,
+                borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border,
+              }}>
+                <Text style={{ ...FONT.body, color: colors.textSecondary, lineHeight: 20 }}>
+                  {getIncreaseMessage(coachId, s.name, s.currentWeight, s.suggestedWeight)}
+                </Text>
               </View>
             ))}
           </GlassCard>
