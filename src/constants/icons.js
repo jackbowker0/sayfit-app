@@ -66,6 +66,10 @@ import {
   Grip,
   CircleUser,
   BicepsFlexed,
+  // Nutrition
+  UtensilsCrossed,
+  Apple,
+  Beef,
 } from 'lucide-react-native';
 
 // ---- TAB BAR ----
@@ -171,6 +175,14 @@ export const SOCIAL_ICONS = {
   bookmark: Bookmark,
   report: Flag,
   follow: CircleUser,
+};
+
+// ---- NUTRITION ----
+export const NUTRITION_ICONS = {
+  utensils: UtensilsCrossed,
+  apple: Apple,
+  protein: Beef,
+  kcal: Flame,
 };
 
 // ---- STATS ----

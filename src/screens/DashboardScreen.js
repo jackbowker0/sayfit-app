@@ -24,6 +24,7 @@ import { getMuscleIcon, getAchievementIcon, getTierIcon } from '../constants/ico
 import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
 import WeightCard from '../components/WeightCard';
+import NutritionCard from '../components/NutritionCard';
 import WorkoutDetailSheet from '../components/WorkoutDetailSheet';
 import AchievementDetailSheet from '../components/AchievementDetailSheet';
 import AccountabilityWidget from '../components/AccountabilityWidget';
@@ -322,8 +323,9 @@ export default function DashboardScreen({ navigation }) {
           </View>
         </GlassCard>
 
-        {/* Weight + Accountability — below the key action cards */}
+        {/* Weight + Nutrition + Accountability — below the key action cards */}
         <WeightCard key={weightKey} navigation={navigation} onWeightLogged={() => setWeightKey(k => k + 1)} />
+        <NutritionCard navigation={navigation} />
         <AccountabilityWidget navigation={navigation} />
 
         {/* Recent Achievements */}
