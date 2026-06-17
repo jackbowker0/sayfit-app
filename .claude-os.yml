@@ -1,0 +1,6 @@
+# claude-os marker — see docs/SPEC.md / templates/claude-os.yml.example
+intent: 'SayFit revival: voice-log lifts + photo-log meals (frictionless), one "am I winning?" body-comp dashboard; reuse existing social/share layer. See BRIEF.md'
+lane: build
+type: other
+ship_target: App Store / Expo
+status: parked
