@@ -3,6 +3,14 @@
 Generated 2026-06-17 from a codebase-mapping workflow (6 readers + planner + adversarial critic).
 See [BRIEF.md](BRIEF.md) for thesis/scope. Sequencing rule: **smallest-shippable & solo-valuable first; nothing blocks on the Apple Developer account except T11 (HealthKit).**
 
+## Status — 2026-06-17 (branch `feat/voice-log-lifts`, not pushed)
+- ✅ **T1 DONE** (`dbc014d`) — voice-log lifts, stage-and-confirm, units-aware, PR-safe.
+- ✅ **T3 DONE** (`267f036`) — nutrition data model (local-first) + macro targets.
+- ✅ **T4 DONE** (`2f36f7e`) — NutritionScreen + dashboard NutritionCard (manual meal tracking).
+- Verified by ESM/bracket/structure checks only — **not yet run on a device** (`node_modules` not installed). Real proof = a dev build (voice STT needs native, not Expo Go).
+- **Blocked / needs Jack:** T2 (confirm `ANTHROPIC_API_KEY` is a live Supabase secret — test: does the in-app AI coach reply?); T5–T9 (need `npm install` + camera deps + a build); T11 (just an `eas init` re-link — account already exists).
+- **Next when unblocked:** dev build to dogfood T1+T4 → then T2 (robust voice parse) and T5/T6 (photo→macros).
+
 ## Resolved open flags (from the code, not assumptions)
 - **Nutrition: CONFIRMED ABSENT.** Only trace is an orphaned `food_logs` RLS block in `supabase/migrations/20260225000000_*.sql` (ALTERs a table never CREATEd — would fail on a clean DB). No food/meal/macro code anywhere. "calorie" everywhere = calories *burned*.
 - **Voice STT: ALREADY INSTALLED & PROVEN.** `expo-speech-recognition` is a dep, plugin-configured, mic-permissioned, and working in `src/screens/JustTalkScreen.js`. `src/services/voice.js` is a TTS-only mock — do NOT build on it.
