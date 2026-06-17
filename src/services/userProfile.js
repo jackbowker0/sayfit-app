@@ -51,6 +51,17 @@ export async function resetOnboarding() {
   await AsyncStorage.removeItem(PROFILE_KEY);
 }
 
+/** Daily macro targets (null fields = unset). Feeds the nutrition dashboard card. */
+export async function getMacroTargets() {
+  const p = await getUserProfile();
+  return p.macroTargets || { kcal: null, protein: null, carbs: null, fat: null };
+}
+
+export async function saveMacroTargets(targets) {
+  const current = await getMacroTargets();
+  return saveUserProfile({ macroTargets: { ...current, ...targets } });
+}
+
 function getDefaultProfile() {
   return {
     name: '',
@@ -64,6 +75,7 @@ function getDefaultProfile() {
     workoutDays: [],  // [0,1,2,3,4,5,6] where 0=Mon, 6=Sun
     notificationsEnabled: false,
     reminderHour: 18,
+    macroTargets: { kcal: null, protein: null, carbs: null, fat: null }, // null = unset; user sets in Nutrition screen
   };
 }
 

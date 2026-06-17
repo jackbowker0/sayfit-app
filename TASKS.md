@@ -8,7 +8,7 @@ See [BRIEF.md](BRIEF.md) for thesis/scope. Sequencing rule: **smallest-shippable
 - **Voice STT: ALREADY INSTALLED & PROVEN.** `expo-speech-recognition` is a dep, plugin-configured, mic-permissioned, and working in `src/screens/JustTalkScreen.js`. `src/services/voice.js` is a TTS-only mock — do NOT build on it.
 - **AI client: EXISTS & well-architected.** RN never holds a key; it POSTs to Supabase Edge Functions (`functions/coach`, `functions/workout-gen`) that read `ANTHROPIC_API_KEY` from Deno env. New AI features clone that shape. `workout-gen` is text-only; vision needs an image content block + vision model.
 - **Camera/photo: ABSENT.** No `expo-image-picker`/`expo-camera`/`expo-image-manipulator`. `app.json` camera/photo permission strings are "does not use…" placeholders that MUST be rewritten before photo features ship.
-- **Apple Developer account: NOT configured.** `eas.json` submit creds + `extra.eas.projectId` all empty; TestFlight checklist uses placeholders. Gates HealthKit, iOS TestFlight, `eas submit`. Everything in T1–T10 ships without it (simulator/dev build + Android).
+- **Apple Developer account: EXISTS (corrected 2026-06-17 by Jack).** The app already shipped to TestFlight and lives on his phone, so enrollment is done — the empty `eas.json` submit creds + `extra.eas.projectId` are just stale committed config (git shows projectId was always `""`; the real build used EAS's linked state / uncommitted config). T11 is therefore NOT enrollment-blocked — it only needs a mechanical re-link (`eas init` to repopulate projectId + fill submit creds), which Jack has done before. Everything in T1–T10 still ships without any of that.
 
 ## Model/effort per task (Jack's rule)
 Opus 4.8 medium → T1, T2, T4, T7, T8 (units, PR, macro math, vision/RLS). Sonnet 4.6 low–med → T5, T6, T9 (UI screens). **Run `/code-review high` before T7/T8 ship** (health data + private storage).
@@ -61,8 +61,8 @@ AI macro estimate must be clearly editable and must NOT count toward daily total
 Reuse ShareCard/customizer/feed verbatim (upload path already accepts any local image URI). Voice PRs route through the existing CompleteScreen ceremony. Add a meal stat schema to ShareCardCustomizer + a FeedPostCard meal branch. **Document limits:** leaderboard write/rank path doesn't exist (read-only client); meals don't feed challenges/leaderboard. Multiplier, not a solo gate.
 - files: `src/services/shareCards.js`, `src/components/ShareCardCustomizer.js`, `src/components/FeedPostCard.js`, `src/screens/CompleteScreen.js`
 
-## T11 — EAS link + HealthKit import (APPLE-GATED — LAST)  ·  L  ·  blockedBy: Apple Developer enrollment + `eas init`
-Enroll in the paid Apple Developer Program, `eas init` (projectId empty; `appVersionSource=remote` fails builds until linked), fill `eas.json` submit creds, add a HealthKit lib + config plugin, read-import cardio/steps/active-energy into the dashboard (active energy = BURNED, keep distinct from nutrition kcal CONSUMED). Cannot be built/tested without an iOS device build. Sequenced last so it blocks nothing.
+## T11 — EAS re-link + HealthKit import  ·  L  ·  blockedBy: `eas init` re-link (Apple account already exists)
+Account enrollment is DONE (app already on TestFlight). Re-link the EAS project: `eas init` (projectId empty; `appVersionSource=remote` fails builds until linked) + fill `eas.json` submit creds. Then add a HealthKit lib + config plugin, read-import cardio/steps/active-energy into the dashboard (active energy = BURNED, keep distinct from nutrition kcal CONSUMED). Needs an iOS device build to test. Sequenced last so it blocks nothing — but no longer hard-gated, so it can move up if cardio matters for the dogfood test.
 - files: `eas.json`, `app.json`, `app.config.js`, `package.json`, `src/screens/DashboardScreen.js`
 
 ---

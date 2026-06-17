@@ -39,9 +39,10 @@ Social: feed, follow, leaderboards, challenges, comments, accountability widget 
 Freemium; premium tier (advanced analytics, full AI coach, unlimited) via StoreKit — IDEAS.md flags IAP as the biggest revenue lever. Not a v1 concern.
 
 ## Open flags
-- Confirm nutrition/food logging is truly absent in current code (sets photo-meal build size).
-- Apple Developer account status (HealthKit / TestFlight / IAP all gated on it).
-- Voice-parse approach (on-device vs LLM) + photo→macros vision model + per-log AI cost.
+- ~~Confirm nutrition/food logging is truly absent~~ → **RESOLVED: absent** (only an orphaned `food_logs` RLS block, never CREATEd). Biggest net-new surface.
+- ~~Apple Developer account status~~ → **RESOLVED: account exists** (app already shipped to TestFlight). T11/HealthKit needs only an `eas init` re-link, not enrollment.
+- ~~Voice-parse approach + vision model~~ → **RESOLVED:** on-device STT (already installed) + on-device regex parse w/ optional `claude-haiku-4-5` Edge Function fallback (T2); photo→macros on `claude-sonnet-4-6` (T6).
+- **OPEN:** Is `ANTHROPIC_API_KEY` actually set as a live Supabase secret? (Gates T2 + all AI features. Quick test: does the in-app AI coach give real responses?)
 
 ## Build model/effort (for /start)
 Opus 4.8 medium for data-integrity bits (nutrition math, HealthKit sync, voice parsing); Sonnet 4.6 low–med for UI iteration; one `/code-review high` before any health-data or payment code ships.
