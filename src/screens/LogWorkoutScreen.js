@@ -12,11 +12,19 @@ import {
   StyleSheet, Alert, KeyboardAvoidingView, Platform, Keyboard,
   Modal, ActivityIndicator, Animated,
 } from 'react-native';
+// expo-speech-recognition requires a native build — not available in Expo Go
+let ExpoSpeechRecognitionModule = null;
+let useSpeechRecognitionEvent = () => {}; // no-op in Expo Go
+try {
+  const SpeechRec = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = SpeechRec.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = SpeechRec.useSpeechRecognitionEvent;
+} catch (_) {}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FadeInView from '../components/FadeInView';
 import {
   Dumbbell, Footprints, Trophy, Clock, Plus, Minus, X, Check, Search,
-  ClipboardList, Save, Play, Pause, Timer, ArrowUp, ArrowDown, RefreshCw,
+  ClipboardList, Save, Play, Pause, Timer, ArrowUp, ArrowDown, RefreshCw, Mic,
 } from 'lucide-react-native';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
@@ -30,7 +38,7 @@ import {
   parseExerciseInput, saveExerciseSession, compareToLast,
   getTemplates, saveTemplate, deleteTemplate, markTemplateUsed,
   getOverloadSuggestion, getSmartRestDuration, COMMON_EXERCISES,
-  getExerciseLog, getLastSessionSets,
+  getExerciseLog, getLastSessionSets, checkWeightOutliers,
 } from '../services/exerciseLog';
 import { saveWorkout } from '../services/storage';
 import { getUserProfile } from '../services/userProfile';
@@ -333,6 +341,10 @@ export default function LogWorkoutScreen({ navigation }) {
   const [units, setUnits] = useState('lbs');
   const [recentExercises, setRecentExercises] = useState([]);
 
+  // ─── VOICE INPUT ──────────────────────────────────────────────
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [isListening, setIsListening] = useState(false);
+
   const [nudges, setNudges] = useState([]);
   const [prCelebration, setPrCelebration] = useState(null);
   const [showPRModal, setShowPRModal] = useState(false);
@@ -347,6 +359,35 @@ export default function LogWorkoutScreen({ navigation }) {
   const textInputRef = useRef();
 
   useEffect(() => { loadTemplates(); loadProfile(); loadRecents(); loadNudges(); }, []);
+
+  // ─── VOICE: speech recognition events (no-op in Expo Go) ──────
+  useSpeechRecognitionEvent('start', () => setIsListening(true));
+  useSpeechRecognitionEvent('end', () => setIsListening(false));
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results?.[0]?.transcript ?? '';
+    if (transcript) setVoiceTranscript(transcript);
+  });
+  useSpeechRecognitionEvent('error', () => setIsListening(false));
+
+  const handleMicPress = async () => {
+    if (!ExpoSpeechRecognitionModule) {
+      Alert.alert('Voice unavailable', 'Voice logging needs the full app build — it works in the dev/TestFlight build, not Expo Go.');
+      return;
+    }
+    if (isListening) { ExpoSpeechRecognitionModule.stop(); return; }
+    try {
+      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!granted) {
+        Alert.alert('Permission needed', 'Allow microphone access in Settings to log lifts by voice.');
+        return;
+      }
+      setVoiceTranscript('');
+      haptics.tap();
+      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+    } catch {
+      Alert.alert('Voice unavailable', 'Could not start voice input. Try the Type tab instead.');
+    }
+  };
 
   const loadProfile = async () => {
     const profile = await getUserProfile();
@@ -544,15 +585,34 @@ export default function LogWorkoutScreen({ navigation }) {
     ]);
   };
 
+  // Shared staging path: parsed exercises (from Type OR Voice) land in the
+  // editable `exercises` array for review/edit BEFORE any save or PR write.
+  const addParsedExercises = (parsed) => {
+    setExercises(prev => [...prev, ...parsed]);
+    setLoadedTemplateId(null);
+    setCompletedSets({});
+    loadOverloadForExercises(parsed);
+    loadNotesForExercises(parsed);
+  };
+
   const handleParse = () => {
     if (!textInput.trim()) return;
     haptics.tap();
-    const parsed = parseExerciseInput(textInput);
+    const parsed = parseExerciseInput(textInput, units);
     if (parsed.length === 0) { Alert.alert('Hmm', "Couldn't parse that. Try: \"bench press 3x8 185\""); return; }
-    setExercises(prev => [...prev, ...parsed]); setTextInput(''); setLoadedTemplateId(null); setCompletedSets({});
+    addParsedExercises(parsed);
+    setTextInput('');
     setShowTextSuggestions(false);
-    loadOverloadForExercises(parsed);
-    loadNotesForExercises(parsed);
+  };
+
+  const handleVoiceStage = () => {
+    const text = voiceTranscript.trim();
+    if (!text) return;
+    haptics.tap();
+    const parsed = parseExerciseInput(text, units);
+    if (parsed.length === 0) { Alert.alert("Didn't catch that", 'Try: "bench press 3 by 8 at 185, then squat 5 by 5 at 225"'); return; }
+    addParsedExercises(parsed);
+    setVoiceTranscript('');
   };
 
   const handleAddFromForm = async () => {
@@ -600,13 +660,32 @@ export default function LogWorkoutScreen({ navigation }) {
 
   const handleSave = async () => {
     if (exercises.length === 0) { Alert.alert('Nothing to save', 'Add at least one exercise first.'); return; }
+    // Data-integrity gate: confirm implausible weights before they write a permanent PR.
+    const outliers = await checkWeightOutliers(exercises, units);
+    if (outliers.length > 0) {
+      const o = outliers[0];
+      const msg = o.reason === 'ceiling'
+        ? `${o.name} at ${o.weight} ${units} looks too high to be real — double-check before it becomes a permanent PR.`
+        : `${o.name} at ${o.weight} ${units} is a big jump from your best of ${o.priorBest} ${units}. Log it as a new PR?`;
+      Alert.alert('Double-check that weight', msg, [
+        { text: 'Edit', style: 'cancel' },
+        { text: 'Log it', onPress: () => proceedSave() },
+      ]);
+      return;
+    }
+    proceedSave();
+  };
+
+  const proceedSave = async () => {
     setSaving(true);
-    const { entry, newPRs } = await saveExerciseSession({ exercises, source: mode === 'text' ? 'voice' : 'manual' });
+    const source = mode === 'voice' ? 'voice' : (mode === 'text' ? 'text' : 'manual');
+    const { entry, newPRs } = await saveExerciseSession({ exercises, source });
 
     // ─── POSTHOG: workout logged ───
     const _totalSetsLogged = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
     const _totalVolumeLogged = exercises.reduce((sum, ex) => sum + ex.sets.reduce((s, set) => s + ((set.weight || 0) * (set.reps || 0)), 0), 0);
     capture('workout_logged', { exercise_count: exercises.length, total_sets: _totalSetsLogged, total_volume: _totalVolumeLogged, new_prs_count: newPRs.length, units, mode });
+    if (mode === 'voice') capture('lift_voice_logged', { exercise_count: exercises.length, total_sets: _totalSetsLogged, new_prs_count: newPRs.length });
 
     // *** FIX: Also save to workout history so Dashboard shows logged workouts ***
     const workoutName = exercises.slice(0, 2).map(e => e.name).join(' & ') || 'Logged Workout';
@@ -768,6 +847,7 @@ export default function LogWorkoutScreen({ navigation }) {
   // ─── MODE TAB CONFIG ──────────────────────────────────────────
   const modeTabs = [
     { id: 'text', label: 'Type', IconComp: Search },
+    { id: 'voice', label: 'Voice', IconComp: Mic },
     { id: 'form', label: 'Form', IconComp: ClipboardList },
   ];
 
@@ -992,6 +1072,65 @@ export default function LogWorkoutScreen({ navigation }) {
                   );
                 })}
               </ScrollView>
+            </View>
+          )}
+
+          {mode === 'voice' && (
+            <View style={{ marginBottom: 20 }}>
+              {/* Mic button */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: isListening ? coach.color : (isDark ? colors.glassBg : colors.bgCard),
+                  borderWidth: 1, borderColor: isListening ? coach.color : colors.glassBorder,
+                  borderRadius: RADIUS.lg, padding: 18, marginBottom: 12,
+                  alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10,
+                }}
+                onPress={handleMicPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={isListening ? 'Stop listening' : 'Start voice logging'}
+              >
+                <Mic size={20} color={isListening ? getTextOnColor(coach.color) : coach.color} strokeWidth={2.5} />
+                <Text style={{ ...FONT.subhead, fontSize: 15, color: isListening ? getTextOnColor(coach.color) : colors.textPrimary }}>
+                  {isListening ? 'Listening… tap to stop' : 'Tap & say your lifts'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Editable transcript — fix any mishears before staging */}
+              <TextInput
+                style={{
+                  backgroundColor: isDark ? colors.glassBg : colors.bgInput,
+                  borderWidth: 1, borderColor: colors.glassBorder,
+                  borderRadius: RADIUS.lg, padding: 14, ...FONT.body,
+                  color: colors.textPrimary, minHeight: 60, textAlignVertical: 'top', marginBottom: 10,
+                }}
+                placeholder={'e.g. "bench press 3 by 8 at 185, then squat 5 by 5 at 225"'}
+                placeholderTextColor={colors.textDim}
+                value={voiceTranscript}
+                onChangeText={setVoiceTranscript}
+                multiline
+                accessibilityLabel="Voice transcript — edit before adding"
+              />
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: voiceTranscript.trim() ? coach.color : (isDark ? colors.glassBg : colors.bgSubtle),
+                  padding: 14, borderRadius: RADIUS.lg,
+                  alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
+                  opacity: voiceTranscript.trim() ? 1 : 0.6,
+                }}
+                onPress={handleVoiceStage}
+                disabled={!voiceTranscript.trim()}
+                accessibilityRole="button"
+                accessibilityLabel="Add exercises from voice"
+              >
+                <Plus size={16} color={voiceTranscript.trim() ? getTextOnColor(coach.color) : colors.textDim} strokeWidth={2.5} />
+                <Text style={{ ...FONT.subhead, fontSize: 15, color: voiceTranscript.trim() ? getTextOnColor(coach.color) : colors.textDim }}>Add Exercises</Text>
+              </TouchableOpacity>
+
+              <Text style={{ ...FONT.caption, fontSize: 12, color: colors.textDim, marginTop: 10, textAlign: 'center' }}>
+                Review the parsed sets below — nothing's logged until you hit Save.
+              </Text>
             </View>
           )}
 

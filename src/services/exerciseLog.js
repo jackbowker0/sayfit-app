@@ -13,6 +13,34 @@ const LOG_KEY = 'sayfit_exercise_log';
 const PR_KEY = 'sayfit_prs';
 const TEMPLATE_KEY = 'sayfit_templates';
 
+// ---- UNITS ----
+const LBS_PER_KG = 2.20462;
+
+// Plausibility ceiling for a single logged set, in lbs. Anything above this is
+// almost certainly a mis-transcription or fat-finger, not a real lift, and must
+// never silently write a permanent PR (the PR store is never lowered). The
+// heaviest raw lift ever recorded is ~1100 lb, so 1500 is a safe backstop.
+const SANE_WEIGHT_CEILING_LBS = 1500;
+
+function roundWeight(value, unit) {
+  // kg users care about half-kg increments; lbs round to the nearest whole plate-ish number.
+  if (unit === 'kg') return Math.round(value * 2) / 2;
+  return Math.round(value);
+}
+
+/** Convert a weight between 'lbs' and 'kg'. No-op when units match or are unknown. */
+export function convertWeight(value, fromUnit, toUnit) {
+  const v = Number(value) || 0;
+  if (!fromUnit || !toUnit || fromUnit === toUnit) return v;
+  if (fromUnit === 'kg' && toUnit === 'lbs') return roundWeight(v * LBS_PER_KG, 'lbs');
+  if (fromUnit === 'lbs' && toUnit === 'kg') return roundWeight(v / LBS_PER_KG, 'kg');
+  return v;
+}
+
+function ceilingForUnit(unit) {
+  return unit === 'kg' ? SANE_WEIGHT_CEILING_LBS / LBS_PER_KG : SANE_WEIGHT_CEILING_LBS;
+}
+
 // ---- COMPOUND EXERCISES (used for smart rest) ----
 const COMPOUND_EXERCISES = [
   'squat', 'front squat', 'back squat', 'bulgarian split squat',
@@ -160,6 +188,11 @@ async function checkAndUpdatePRs(session) {
     const maxVolume = Math.max(...exercise.sets.map(s => (s.weight || 0) * (s.reps || 0)));
     const maxReps = Math.max(...exercise.sets.map(s => s.reps || 0));
 
+    // Data-integrity backstop: never let an implausible weight write a permanent
+    // PR. The UI outlier gate (checkWeightOutliers) is the primary guard; this
+    // catches anything that slips past it. Skips both weight AND volume for this lift.
+    if (maxWeight > SANE_WEIGHT_CEILING_LBS) continue;
+
     if (!prs[name]) {
       prs[name] = { maxWeight: 0, maxVolume: 0, maxReps: 0 };
     }
@@ -187,6 +220,56 @@ async function checkAndUpdatePRs(session) {
 
   await AsyncStorage.setItem(PR_KEY, JSON.stringify(prs));
   return newPRs;
+}
+
+/**
+ * Rebuild the entire PR map from the full exercise log. Self-heal for when a
+ * bad/mis-logged entry corrupted a PR — the incremental updater never lowers a
+ * PR, so deleting/editing a bad entry and calling this is the only way to undo
+ * a corrupted max. Returns the rebuilt PR map.
+ */
+export async function recomputePRs() {
+  const log = await getExerciseLog();
+  const prs = {};
+  for (const entry of log) {
+    for (const exercise of entry.exercises || []) {
+      const sets = exercise.sets || [];
+      const maxWeight = Math.max(0, ...sets.map(s => s.weight || 0));
+      if (maxWeight > SANE_WEIGHT_CEILING_LBS) continue;
+      const name = normalizeExerciseName(exercise.name);
+      const maxVolume = Math.max(0, ...sets.map(s => (s.weight || 0) * (s.reps || 0)));
+      const maxReps = Math.max(0, ...sets.map(s => s.reps || 0));
+      if (!prs[name]) prs[name] = { maxWeight: 0, maxVolume: 0, maxReps: 0 };
+      prs[name].maxWeight = Math.max(prs[name].maxWeight, maxWeight);
+      prs[name].maxVolume = Math.max(prs[name].maxVolume, maxVolume);
+      prs[name].maxReps = Math.max(prs[name].maxReps, maxReps);
+    }
+  }
+  await AsyncStorage.setItem(PR_KEY, JSON.stringify(prs));
+  return prs;
+}
+
+/**
+ * Flag sets whose weight is implausible — above the absolute ceiling, or a huge
+ * jump (>2.5x) over the user's existing PR for that lift. Used to confirm before
+ * a (possibly mis-heard) voice/typed weight writes a permanent PR.
+ * Returns [{ name, weight, reason: 'ceiling'|'jump', priorBest }].
+ */
+export async function checkWeightOutliers(exercises, unit = 'lbs') {
+  const prs = await getPRs();
+  const ceiling = ceilingForUnit(unit);
+  const outliers = [];
+  for (const ex of exercises || []) {
+    const maxWeight = Math.max(0, ...(ex.sets || []).map(s => s.weight || 0));
+    if (maxWeight <= 0) continue;
+    const priorBest = prs[normalizeExerciseName(ex.name)]?.maxWeight || 0;
+    if (maxWeight > ceiling) {
+      outliers.push({ name: ex.name, weight: maxWeight, reason: 'ceiling', priorBest });
+    } else if (priorBest > 0 && maxWeight > priorBest * 2.5) {
+      outliers.push({ name: ex.name, weight: maxWeight, reason: 'jump', priorBest });
+    }
+  }
+  return outliers;
 }
 
 // ---- PROGRESSIVE OVERLOAD ----
@@ -421,18 +504,18 @@ export async function getProgressChartData(exerciseName) {
 
 // ---- NATURAL LANGUAGE PARSER ----
 
-export function parseExerciseInput(text) {
+export function parseExerciseInput(text, defaultUnit = 'lbs') {
   const input = text.trim().toLowerCase();
   const exercises = [];
   const lines = input.split(/\n|,\s*then\s+|,\s*and\s+then\s+|\.\s+/).filter(Boolean);
   for (const line of lines) {
-    const parsed = parseSingleExercise(line.trim());
+    const parsed = parseSingleExercise(line.trim(), defaultUnit);
     if (parsed) exercises.push(parsed);
   }
   return exercises;
 }
 
-function parseSingleExercise(text) {
+function parseSingleExercise(text, defaultUnit = 'lbs') {
   if (!text || text.length < 3) return null;
 
   let name = '';
@@ -471,11 +554,15 @@ function parseSingleExercise(text) {
     clean = clean.replace(repsMatch[0], ' ').trim();
   }
 
-  const weightMatch = clean.match(/(?:at|@|with)?\s*(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?|kg|kilos?)?\b/i);
+  const weightMatch = clean.match(/(?:at|@|with)?\s*(\d+(?:\.\d+)?)\s*(lbs?|pounds?|kg|kilos?)?\b/i);
   if (weightMatch) {
     const val = parseFloat(weightMatch[1]);
-    if (val > 20 || clean.match(/lbs?|pounds?|kg|kilos?/i)) {
-      weight = val;
+    const unitToken = (weightMatch[2] || '').toLowerCase();
+    const spokenUnit = /kg|kilo/.test(unitToken) ? 'kg' : (/lb|pound/.test(unitToken) ? 'lbs' : null);
+    if (val > 20 || spokenUnit) {
+      // Store weight in the user's profile unit, converting when a different
+      // unit was explicitly stated (e.g. "100 kg" while the profile is in lbs).
+      weight = spokenUnit ? convertWeight(val, spokenUnit, defaultUnit) : val;
       clean = clean.replace(weightMatch[0], ' ').trim();
     } else if (!reps && val <= 20) {
       reps = val;
