@@ -1,10 +1,13 @@
 # SayFit Revival — Build Backlog (v1)
 
 Generated 2026-06-17 from a codebase-mapping workflow (6 readers + planner + adversarial critic).
-See [BRIEF.md](BRIEF.md) for thesis/scope. Sequencing rule: **smallest-shippable & solo-valuable first; nothing blocks on the Apple Developer account except T11 (HealthKit).**
+See [BRIEF.md](BRIEF.md) for thesis/scope and **[STRATEGY.md](STRATEGY.md)** for the market-grounded "best fitness app" plan (97-source research, 2026-06-23). T1–T11 = original revival build; **T12–T18 = the MFP-replacement tier derived from STRATEGY.md**. Sequencing rule: **smallest-shippable & solo-valuable first; nothing blocks on the Apple Developer account except T11 (HealthKit).**
+
+> **Strategic north star (STRATEGY.md):** the shortest path to "credibly replaces MyFitnessPal + my lifting app" is — **food DB + free barcode (parity) → voice lifts polished (the wedge) → adaptive TDEE + "am I winning?" (the edge) → share loop (growth).** The whole thesis rests on logging being genuinely sub-5-seconds; prove the voice keystone *feels* right on a real device before pouring effort into the food-DB build.
 
 ## Status — 2026-06-17 (branch `feat/voice-log-lifts`, not pushed)
 - ✅ **T1 DONE** (`dbc014d`) — voice-log lifts, stage-and-confirm, units-aware, PR-safe.
+  - ➕ **Offline parser hardened 2026-06-23** (uncommitted) — `parseExerciseInput` now handles spoken number-words + gym-colloquial hundreds ("three by eight at one eighty five"=3×8@185, "two twenty five"=225, "three fifteen"=315, "two oh five"=205), the "by"/"times" separator, light-dumbbell weights via `at/with` cue (fixes "3x8 at 15" loss + the "squ**at**"→weight-cue false match), `rpe N` capture, and a `confidence:'low'` flag when reps were defaulted. Verified by an 18-case node suite (`/tmp/sayfit-parser.mjs`) + `node --check`. This is T2's offline fallback; the LLM Edge Function still handles freeform commentary.
 - ✅ **T3 DONE** (`267f036`) — nutrition data model (local-first) + macro targets.
 - ✅ **T4 DONE** (`2f36f7e`) — NutritionScreen + dashboard NutritionCard (manual meal tracking).
 - Verified by ESM/bracket/structure checks only — **not yet run on a device** (`node_modules` not installed). Real proof = a dev build (voice STT needs native, not Expo Go).
@@ -72,6 +75,46 @@ Reuse ShareCard/customizer/feed verbatim (upload path already accepts any local 
 ## T11 — EAS re-link + HealthKit import  ·  L  ·  blockedBy: `eas init` re-link (Apple account already exists)
 Account enrollment is DONE (app already on TestFlight). Re-link the EAS project: `eas init` (projectId empty; `appVersionSource=remote` fails builds until linked) + fill `eas.json` submit creds. Then add a HealthKit lib + config plugin, read-import cardio/steps/active-energy into the dashboard (active energy = BURNED, keep distinct from nutrition kcal CONSUMED). Needs an iOS device build to test. Sequenced last so it blocks nothing — but no longer hard-gated, so it can move up if cardio matters for the dogfood test.
 - files: `eas.json`, `app.json`, `app.config.js`, `package.json`, `src/screens/DashboardScreen.js`
+
+---
+
+# Tier 2 — MFP-replacement backlog (T12–T18, from STRATEGY.md)
+
+These turn SayFit from "voice-log + nutrition app" into a credible all-in-one MFP/Hevy replacement. **Gating insight:** the food database + free barcode scanner (T12) is the single biggest parity gap *and* one of the cheapest to stand up — but it's downstream of proving voice feels right (the hit-signal test). Sequence accordingly.
+
+## Model/effort per task (Tier 2)
+Opus 4.8 medium → T12 (food-data integrity + dedup), T15 (adaptive TDEE math — back-calculation is data-integrity-critical), T17 (paywall/billing). Sonnet 4.6 low–med → T13, T14, T16, T18 (UI/onboarding/share, behind a test gate). **Run `/code-review high` before T17 (billing) and any photo/body-image storage ships.**
+
+## T12 — Food database + FREE barcode scanner (the parity keystone)  ·  L  ·  solo  ·  blockedBy: T5 (camera plumbing); voice hit-signal validated first
+The single biggest gap between SayFit and "credible MFP replacement." Stack (near-$0): **Open Food Facts** primary barcode lookup (4M products, ODbL, offline-cacheable) → **FatSecret Platform Basic** silent fallback on OFF 404 (free tier) → **USDA FoodData Central** for generic staples. Scanner via **`react-native-vision-camera` + `…-barcode-scanner`** — ONE camera instance also serves T5/T6 photo-macros, so reconcile with the `expo-image-picker` choice in T5 (vision-camera likely supersedes it). Cache every lookup in **`expo-sqlite`** for offline scanning (a real edge over MFP). **Barcode scanning MUST stay permanently free** — it's MFP's most-hated paywall and our #1 refugee magnet. Add OFF attribution on the About screen (ODbL compliance). Defer Nutritionix ($1,850/mo, US chains) to post-revenue.
+- files: `package.json`, `app.config.js`, `app.json` (camera strings), new `src/services/foodDatabase.js`, `src/services/nutrition.js`, new SQLite cache layer
+- risk: **ODbL licensing edge case** (don't redistribute a merged OFF+proprietary dataset) — confirm at legal.openfoodfacts.org before App Store submission. OFF restaurant/generic coverage is thin; FatSecret fallback is load-bearing.
+
+## T13 — Food diary + manual entry + macro totals (one-tap surfaced)  ·  M  ·  solo  ·  blockedBy: T12 (or ships partial on T3 data)
+The everyday MFP loop. Surface the diary at ONE tap (MFP's 2026 redesign buried it — direct counter). Hero metric = **progress-toward-goal**, never a raw deficit number (shame trigger). Add **copy-yesterday / save-meal** shortcut (MFP removed copy-meal in 2026 — cheap refugee win). Builds on the T3 `nutrition.js` data model + T4 NutritionScreen.
+- files: `src/services/nutrition.js`, `src/screens/NutritionScreen.js`, `src/components/NutritionCard.js`
+
+## T14 — 30-second personalized onboarding → TDEE/macro target  ·  M  ·  solo  ·  blockedBy: none
+Deliver a personal number in <30s of first launch: 4–5 questions (goal, weight, height, activity, **"what made you quit tracking before?"**) → show estimated TDEE + macro target + projected outcome BEFORE asking for any work. AI personalization → up to 50% higher retention. This is also where the T17 paywall lands (end of onboarding, once they've seen their plan).
+- files: new onboarding flow, `src/services/userProfile.js`, `src/services/exerciseLog.js` (TDEE calc)
+
+## T15 — Adaptive TDEE engine (MacroFactor-style)  ·  L  ·  solo  ·  blockedBy: T13 (needs intake data) + body-weight log  ·  /code-review high
+The signature edge no all-in-one has. Back-calculate true expenditure weekly from **logged intake vs. weight trend**, then recalibrate macro targets. Must be **adherence-neutral** — partial logging can't corrupt the estimate (graceful degradation). MacroFactor owns this but has no workout tracker; SayFit + this = a genuine first. **Data-integrity critical — Opus medium, not a Sonnet one-shot.**
+- files: new `src/services/adaptiveTargets.js`, `src/services/bodyWeight.js`, `src/services/nutrition.js`, `src/services/userProfile.js`
+- risk: degrades on sparse data (needs near-daily weigh-ins + complete logs) — design for missing days, never show a wild target swing.
+
+## T16 — "Am I winning?" narrative dashboard + streaks-with-forgiveness  ·  M  ·  solo  ·  blockedBy: T15 (verdict needs adaptive targets) + lift/macro data
+WHOOP-style 3-tier progressive disclosure: tier-1 plain-English one-liner ("On track — 0.4 lb/week toward goal"), tier-2 trend chart, tier-3 raw breakdown. Fuses weight trend + macro adherence % + lift progression. **Doesn't exist as a polished product anywhere** — and it's the most shareable artifact (feeds T18). Add **streaks with a forgiveness layer** (shield = one free miss/week + comeback bonus; rigid streaks trigger the abandonment spiral). Never show shame-framing.
+- files: `src/screens/DashboardScreen.js`, new `src/services/winningVerdict.js`, streak logic in `userProfile.js`/`nutrition.js`
+
+## T17 — Hard paywall + 7-day trial + billing/security gate  ·  M  ·  blockedBy: T14 (paywall lands at onboarding end)  ·  /code-review high
+Hard paywall, 7-day free trial, shown at the END of personalized onboarding (86% of conversions happen Day 0). **$9.99/mo or $69.99/yr**, annual default + "Best Value" badge. One tier, no Premium/Premium+ split. Wire via RevenueCat or StoreKit2. **Billing must be airtight + run the security gate** before any growth push (Cal AI got pulled for deceptive billing + had a 3.2M-user breach — viral distribution amplifies trust failures). Audit the privacy manifest here (see Known limitations).
+- files: new paywall screen, IAP service, `app.json` entitlements
+- risk: App Store billing-clarity rules are strict; get the trial→charge disclosure exactly right.
+
+## T18 — Shareable PR/receipt cards + read-only friends feed  ·  M  ·  multiplayer  ·  blockedBy: T1, T16  ·  builds on existing share layer
+Product-led growth loop (Jack won't grind content). **Own the share template** — auto-generate: (1) **voice-logged PR card** on a new 1RM ("First 225 bench — logged by voice. SayFit"), (2) **Sunday "receipt"** (PRs, macro hit-rate, weight arrow, streak), (3) **"am I winning?" weekly card**. Add a **read-only friends feed** ("friends' recent lifts") + consented "your friend hit a PR" pull-notification — social-embedded users churn ~30% less. Reuses the existing ShareCard/customizer/feed (T10 overlaps — merge). ASO: own long-tail terms ("voice workout logger", "speak your sets", "snap meal macros"), keyword-rich screenshot captions, per-cluster Custom Product Pages; seed one community (r/weightroom, r/leangains) at launch.
+- files: `src/services/shareCards.js`, `src/components/ShareCardCustomizer.js`, `src/components/FeedPostCard.js`, `src/screens/CompleteScreen.js`, App Store Connect (ASO, CPPs)
 
 ---
 
