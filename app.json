@@ -28,34 +28,34 @@
         "NSPrivacyTrackingDomains": [],
         "NSPrivacyCollectedDataTypes": [
           {
-            "NSPrivacyDataType": "NSPrivacyDataTypeName",
-            "NSPrivacyDataTypeLinked": true,
-            "NSPrivacyDataTypeTracking": false,
-            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeName",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           },
           {
-            "NSPrivacyDataType": "NSPrivacyDataTypeEmailAddress",
-            "NSPrivacyDataTypeLinked": true,
-            "NSPrivacyDataTypeTracking": false,
-            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailAddress",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           },
           {
-            "NSPrivacyDataType": "NSPrivacyDataTypeUserID",
-            "NSPrivacyDataTypeLinked": true,
-            "NSPrivacyDataTypeTracking": false,
-            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeUserID",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           },
           {
-            "NSPrivacyDataType": "NSPrivacyDataTypeHealthAndFitness",
-            "NSPrivacyDataTypeLinked": true,
-            "NSPrivacyDataTypeTracking": false,
-            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeHealthAndFitness",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           },
           {
-            "NSPrivacyDataType": "NSPrivacyDataTypeDeviceID",
-            "NSPrivacyDataTypeLinked": true,
-            "NSPrivacyDataTypeTracking": false,
-            "NSPrivacyDataTypePurposes": ["NSPrivacyDataTypePurposeAppFunctionality"]
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeDeviceID",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
           }
         ],
         "NSPrivacyAccessedAPITypes": [
