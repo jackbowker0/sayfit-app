@@ -25,6 +25,7 @@ import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
 import WeightCard from '../components/WeightCard';
 import NutritionCard from '../components/NutritionCard';
+import ProtocolCard from '../components/ProtocolCard';
 import WorkoutDetailSheet from '../components/WorkoutDetailSheet';
 import AchievementDetailSheet from '../components/AchievementDetailSheet';
 import AccountabilityWidget from '../components/AccountabilityWidget';
@@ -326,6 +327,7 @@ export default function DashboardScreen({ navigation }) {
         {/* Weight + Nutrition + Accountability — below the key action cards */}
         <WeightCard key={weightKey} navigation={navigation} onWeightLogged={() => setWeightKey(k => k + 1)} />
         <NutritionCard navigation={navigation} />
+        <ProtocolCard navigation={navigation} />
         <AccountabilityWidget navigation={navigation} />
 
         {/* Recent Achievements */}

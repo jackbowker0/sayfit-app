@@ -70,6 +70,11 @@ import {
   UtensilsCrossed,
   Apple,
   Beef,
+  // Protocol
+  Syringe,
+  Pill,
+  CalendarClock,
+  Droplet,
 } from 'lucide-react-native';
 
 // ---- TAB BAR ----
@@ -183,6 +188,16 @@ export const NUTRITION_ICONS = {
   apple: Apple,
   protein: Beef,
   kcal: Flame,
+};
+
+// ---- PROTOCOL ----
+export const PROTOCOL_ICONS = {
+  injectable: Syringe,
+  peptide: Syringe,
+  oral: Pill,
+  topical: Droplet,
+  supplement: Pill,
+  schedule: CalendarClock,
 };
 
 // ---- STATS ----

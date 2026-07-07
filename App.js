@@ -29,6 +29,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import TutorialScreen from './src/screens/TutorialScreen';
 import WeightScreen from './src/screens/WeightScreen';
 import NutritionScreen from './src/screens/NutritionScreen';
+import ProtocolScreen from './src/screens/ProtocolScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AchievementsScreen from './src/screens/AchievementsScreen';
@@ -124,6 +125,7 @@ function AppInner({ onboarded, needsTutorial }) {
           <Stack.Screen name="MainTabs" component={HomeTabs} />
           <Stack.Screen name="Weight" component={WeightScreen} />
           <Stack.Screen name="Nutrition" component={NutritionScreen} />
+          <Stack.Screen name="Protocol" component={ProtocolScreen} />
           <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Achievements" component={AchievementsScreen} />
