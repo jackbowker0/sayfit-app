@@ -599,6 +599,10 @@ function parseSingleExercise(text, defaultUnit = 'lbs') {
   // Spoken numbers -> digits, then normalize "by"/"times" separators to "x"
   // (STT writes "3 by 8", not "3x8").
   clean = wordsToDigits(clean);
+  // iOS STT renders spoken compound-hundred numbers as clock times:
+  // "one eighty five" -> "1:85", "two twenty five" -> "2:25". Rejoin the digits
+  // so the weight parses as 185/225 instead of grabbing the "1" or "2".
+  clean = clean.replace(/(\d{1,2}):(\d{2})\b/g, '$1$2');
   clean = clean.replace(/(\d)\s*(?:x|times|by)\s*(\d)/gi, '$1 x $2');
 
   // RPE cue, captured before name extraction so it doesn't pollute the name.

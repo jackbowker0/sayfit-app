@@ -105,6 +105,9 @@ function parseSingleExercise(text, defaultUnit = 'lbs') {
 
   // Spoken numbers -> digits, then normalize "by"/"times" separators to "x".
   clean = wordsToDigits(clean);
+  // iOS STT renders spoken compound-hundred numbers as clock times:
+  // "one eighty five" -> "1:85", "two twenty five" -> "2:25". Rejoin the digits.
+  clean = clean.replace(/(\d{1,2}):(\d{2})\b/g, '$1$2');
   clean = clean.replace(/(\d)\s*(?:x|times|by)\s*(\d)/gi, '$1 x $2');
 
   // RPE cue, captured before name extraction so it doesn't pollute the name.
@@ -224,6 +227,12 @@ check('deadlift three by three at three fifteen', { name: 'Deadlift', sets: 3, r
 check('overhead press for twelve at ninety five', { name: 'Overhead Press', sets: 1, reps: 12, weight: 95 });
 check('curls three sets of fifteen at forty five', { name: 'Curls', sets: 3, reps: 15, weight: 45 });
 check('bench two oh five for five', { name: 'Bench', sets: 1, reps: 5, weight: 205 });
+
+// iOS STT clock-time artifact for spoken hundreds ("one eighty five" -> "1:85")
+check('bench press 3 x 8 at 1:85', { name: 'Bench Press', sets: 3, reps: 8, weight: 185 });
+check('squat 5x5 at 2:25', { name: 'Squat', sets: 5, reps: 5, weight: 225 });
+check('deadlift 3x3 at 3:15', { name: 'Deadlift', sets: 3, reps: 3, weight: 315 });
+check('overhead press 3x8 at 1:35', { name: 'Overhead Press', sets: 3, reps: 8, weight: 135 });
 check('incline press one hundred eighty five for eight', { name: 'Incline Press', sets: 1, reps: 8, weight: 185 });
 
 // light dumbbell with cue (the "3x8 at 15" loss bug)
