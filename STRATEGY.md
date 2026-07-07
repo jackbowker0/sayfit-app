@@ -221,3 +221,33 @@ Jack **is** the archetype, so every pillar has a zero-recruiting validation loop
 - **Scope explosion (the #1 solo-builder killer):** every pillar has a trap that turns a feature into a business (recipe engines, video libraries, PK modeling, clinical med-management, running blood draws). Ship the **thin, fused** version; refuse the deep standalone the incumbents already own.
 - **Time-bound moat:** ship c+a inside ~12–18 months or Whoop/Regimen close it.
 - **Low-confidence flags to verify before betting:** Reddit demand (r/trt, r/PEDs, r/Peptides) was blocked/unverified — 15+ existing apps are indirect proof, but run an authenticated pass before quoting sentiment; retatrutide's investigational status is the least-tested store-policy edge (live apps track it by name, but treat as moderate-confidence); don't repeat unverified marketing stats (e.g. StretchIt's "93% relief").
+
+---
+
+# Information Architecture — "Hub + Tabs" shell
+
+*Locked 2026-07-07. The navigation blueprint for the whole "everything app." Decides where all 23 roadmap items (T1–T23) live, so it's fixed now even though the pillars build later (after the core loop proves sticky). Precedent: MacroFactor / Whoop / every good multi-module health app = smart home + tabs, never a menu-gate.*
+
+**Problem it solves:** congestion is the #1 killer of all-in-one apps. As SayFit grows to hold workouts, food, supplements, peptides, injections, mobility, and bloodwork, a single screen becomes a junk drawer and fast-logging drowns. On open, the user wants a clear set of entry points — not one polluted/congested screen.
+
+**The refinement (avoid the trap):** do NOT ship a full-screen menu you tap through on every launch — that walls off logging and breaks the sub-5-second / voice-first principle. Instead: a smart **Home hub + a bottom tab bar**.
+
+**1) Bottom tab bar** (native iOS, ≤5 items, pillars grouped so it never overflows):
+`Home` · `Train` (workouts + mobility) · `Fuel` (food + meal plan/grocery) · `Protocol` (supplements + peptides + injections + bloodwork, with sub-sections) · `Coach` (AI + "am I winning?" depth)
+
+**2) Home tab = the picker idea, but as a LIVE hub** (not a dumb menu):
+- Top: the "am I winning?" one-liner (today's status).
+- Below: a grid of **action tiles** that are shortcut AND status — e.g. Log Workout, Snap Meal, "Supplements 2/3", "Injection: today", Log weight. Each tile also surfaces what needs doing.
+
+**3) Universal quick-add:** a persistent mic/+ so voice logging is one tap from ANY screen, never gated behind the hub.
+
+**This is the evolution of the current `DashboardScreen`** (static cards → live action tiles) + adding the tab bar.
+
+### Where the roadmap lives (tab → pillars/tasks)
+| Tab | Holds | Roadmap |
+|---|---|---|
+| **Home** | "am I winning?" one-liner + status-aware action tiles + universal quick-add | hub over T16; quick-add over T1 |
+| **Train** | Voice-log lifts, workout history/PRs, mobility screen + desk-break | T1, T2, T6(lift), **T23** |
+| **Fuel** | Food diary, photo-macros, barcode/food DB, meal plan + grocery | T3, T4, T5, **T12, T13, T22** |
+| **Protocol** | Supplement AM/PM stack, peptide/injection log + reminders, bloodwork trends | **T19, T20, T21** |
+| **Coach** | AI coach, adaptive TDEE, "am I winning?" depth + cross-domain insight | T15, T16, coach |
