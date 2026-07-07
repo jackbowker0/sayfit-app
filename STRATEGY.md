@@ -167,3 +167,57 @@ Jack needs **product-led growth**, not a TikTok grind. Cal AI's virality was cre
 5. **Retention reality is brutal.** Category Day-30 retention is 8–15%; even optimized apps hit 20–35%. 77% of daily users gone within 3 days. Manual logging abandoned by 70% in two weeks. The whole thesis rests on voice/photo *actually* delivering the friction reduction that lifts AI-assisted adherence to ~64% — if logging isn't genuinely sub-5-second, none of the rest matters.
 6. **Incumbents are buying the gap (medium-confidence on timeline).** MFP bought Cal AI; Strava bought Runna + Breakaway. Voice/photo AI is becoming must-have, not differentiator. SayFit's defensible ground is the **fusion + coaching layer** legacy apps can't easily bolt on — not the individual inputs. Compete on what they structurally can't copy fast (cross-domain context), not on photo-calorie quality alone.
 7. **Solo-builder bandwidth vs. surface area.** This is a wide product (two domains + AI + social + payments). The roadmap is ruthlessly sequenced for a reason — resist building the social layer or recovery fusion before the NOW tier is genuinely sub-5-second and trustworthy. Shipping the core loop *well* beats shipping all of it *thinly*.
+
+---
+
+# Addendum: The "Everything App" — Five New Pillars
+
+*Added 2026-07-07 from a 130-source research pass (hormone/peptide trackers, App Store policy, biomarker-trend apps, supplement+mobility apps, meal-plan+grocery apps). Extends — does not replace — the MFP-parity plan above.*
+
+## A1. The expanded thesis
+
+"All the fitness apps in one" does **not** mean matching Function Health on biomarker breadth, Pliability on video depth, or Medisafe on clinical med-management — those are capital/content races a solo builder loses. It means SayFit becomes the only app that holds a serious lifter's **whole self-directed health protocol in one correlated timeline**: lifts, macros, body-comp, hormone/peptide doses, supplement adherence, bloodwork trends, and mobility. The single deepest moat is the **fused view — bloodwork + protocol (TRT/peptide) + training + nutrition, correlated into one "am-I-winning-on-my-health" signal.** Research validates this as unclaimed whitespace: across ~15 hormone/peptide trackers (Dosafy, TRT Plus, PeptIQ, Shotsy, Regimen) and ~10 labs platforms (Function, Superpower, InsideTracker, Whoop Advanced Labs), **not one** fuses lab-trend data with a real set/rep lift log and daily macro log. It's defensible because SayFit already owns the two hardest halves (voice lifts + photo macros) that every hormone/labs incumbent lacks. **Caveat: it's a time-bound moat** — Whoop Advanced Labs and Regimen are each ~one release from encroaching. Ship the fusion inside ~12–18 months or a funded player closes it.
+
+## A2. App Store viability verdict — **CONDITIONAL-GO**
+
+Including TRT + peptide (incl. retatrutide) protocol tracking in the **public** App Store build is viable. Live, non-sideloaded precedent exists today (checked 2026-07): *Anabolic Steroid & TRT Tracker*, *Shotsy*, *PeptIQ* (both name retatrutide + BPC-157), *Peptide Tracker & Calculator*. The category is approved.
+
+Guardrails, by guideline:
+- **1.4.3 (controlled substances)** — bans *facilitating sale / encouraging consumption*, NOT private logging of what a user already has. TRT (Schedule III, prescribable) and legal peptides don't trip it. Keep store-facing copy/keywords/icons clinical; **no slang** ("gear", "juice", "blast and cruise"). The one enforcement case (*Amphetamine*, 2021) was branding, was appealed, and was reinstated unchanged.
+- **1.4.2 (dosage calculators)** — the biggest live risk. Calculators must come from a manufacturer/pharmacy/FDA entity; SayFit isn't. **Dose entry is always user-typed and user-confirmed.** Any reconstitution/concentration aid ships behind a first-use disclaimer ("unit-conversion aid based on numbers you enter, not a dosing recommendation") and is **never** marketed as a "dosage calculator."
+- **1.4.1 (medical apps)** — disclose methodology behind any accuracy claim; remind users to consult a doctor.
+- **5.1.3 (HealthKit)** — separate review surface for the bloodwork pillar; no false HealthKit writes, no health PII in iCloud against terms.
+
+**Required framing (the template every approved comp uses):** a **generic "medication & protocol tracker"** — a passive log/calendar for data the user already has (prescriber, vial label, lab PDF), where users define ANY compound (name/dose/unit/schedule) rather than a curated PED picklist. Include the standard disclaimers ("informational only, not medical advice, consult your provider" + "only track substances legally prescribed or obtained in your jurisdiction") and a **first-run acknowledgment gate** on the hormone/peptide module.
+
+**Stays personal/TestFlight-only (config flag):** explicit bodybuilding PED-cycle vocabulary — on/off-cycle planning, PCT, blast-and-cruise. Same architecture, two configs, risk cleanly split: public build = prescribed-hormone + peptide/GLP-1 tracking; personal build = the full cycle vocabulary.
+
+## A3. The five new pillars
+
+| Pillar | Tag | Native build (thin) | Skip / don't | Effort |
+|---|---|---|---|---|
+| **(a) Hormone/peptide protocol** | **MOAT** | Compound defs, dose/site/timing log, injection-site rotation map, dose reminders | PK ester-curve modeling, any auto-calculated dose | **M** |
+| **(b) Supplement/med reminders** | RETENTION | AM/PM "stack" checklist anchored to the existing weigh-in/workout moment; streak **with grace mechanic** (never hard-reset); tiered notifications (gentle for supps, alarm-style for injection days) | Drug-interaction checks, refill tracking, caregiver escalation, compliance reports | **S** |
+| **(c) Biomarker/bloodwork trends** | **MOAT** (fusion half) | OCR/PDF/manual ingest from **any** lab (Quest/LabCorp/Function/Marek), overlay chart plotting labs on the same timeline as PRs + body-comp + macro adherence | Running your own blood draws; Superpower-style supplement-upsell funnel | **M** → **L** (causal insight) |
+| **(d) Mobility/prehab** | NICE-TO-HAVE | Periodic **mobility screen** → a score over time (plugs into "am I winning?"); short daily desk-break routine from a small GIF/static library | Produced-video instructor library, 30-day programs (that's a content business) | **M** |
+| **(e) Meal-plan + grocery + prep** | PARITY (differentiated) | **Anchor-meal library** (repetition as a feature — "cut mode" deliberately boring/cheap), batch-scaled grocery list, templated prep steps, **manual per-staple price field** → "this week ≈ $X", all generated from macros + logged history SayFit already owns | Recipe-discovery/variety engine, live retailer price APIs | **M** |
+
+**Why (c)+(a) are the moat, not just features:** the dose-tracker alone is crowded; the lab-tracker alone is crowded. **Plotting doses against labs against training/nutrition is the unclaimed seam** — and only SayFit can build it, because only SayFit already has the training + nutrition half.
+
+## A4. Founder-as-user — the fastest dogfood path
+
+Jack **is** the archetype, so every pillar has a zero-recruiting validation loop already running in his life: (a) his 200mg/wk TRT + retatrutide cut is the exact primary use case; (b) his real stack (creatine, electrolytes, fish oil, citrus bergamot, boron, multi) *is* the seed AM/PM template; (c) he **already compared two lab panels by hand** — the ingest+overlay is literally productizing that, and his panels are the test fixtures; (d) desk job + PPL 5–6×/wk is the precise mobility persona; (e) he **already runs a repeating anchor-meal cut + grocery list by hand**. The thesis in one line: the target user is **already doing the multi-app stitching**, so a v1 that removes two apps from his stack is validated before launch.
+
+## A5. Sequencing (folds into NOW/NEXT/LATER above — core rule unchanged)
+
+- **NOW (unchanged):** voice lifts, photo macros, adaptive TDEE, body-comp dashboard, growth, monetization. **No new pillar competes for this slot.** Nothing below is built until the core loop is demonstrably sticky.
+- **NEXT — pull the moat pair early:** **biomarker ingest + fused overlay (c)** and **protocol log (a)**, shipped *together* (the protocol log is low-value alone, defensible the instant its doses plot against the labs+training overlay). Bundle the thin **AM/PM reminder (b, effort S)** here since it directly drives protocol adherence. These are the **only** new pillars justified the moment the core loop proves out — because they're the moat and the window is finite.
+- **LATER (after the moat lands and retains):** meal-plan/anchor-meals + grocery (e), mobility screen + desk-break (d), and the AI-coach **causal** insight layer on the fusion data ("hematocrit up 3 panels as volume climbed"; "E2 spike tracks your refeed carb bump").
+
+## A6. Added risks
+
+- **App Store rejection (medium, mitigable):** 1.4.2 if any auto-dose ships; 1.4.3 if branding reads PED-promotional. Mitigation = user-typed doses only, generic "protocol tracker" framing, clinical copy, disclaimers, first-run gate, PED-cycle vocab confined to TestFlight.
+- **Medical liability — track, don't prescribe (permanent design constraint):** never diagnose, recommend, or calculate a dose. Passive log for data the user already has. Crossing this spikes both store risk and real liability.
+- **Scope explosion (the #1 solo-builder killer):** every pillar has a trap that turns a feature into a business (recipe engines, video libraries, PK modeling, clinical med-management, running blood draws). Ship the **thin, fused** version; refuse the deep standalone the incumbents already own.
+- **Time-bound moat:** ship c+a inside ~12–18 months or Whoop/Regimen close it.
+- **Low-confidence flags to verify before betting:** Reddit demand (r/trt, r/PEDs, r/Peptides) was blocked/unverified — 15+ existing apps are indirect proof, but run an authenticated pass before quoting sentiment; retatrutide's investigational status is the least-tested store-policy edge (live apps track it by name, but treat as moderate-confidence); don't repeat unverified marketing stats (e.g. StretchIt's "93% relief").

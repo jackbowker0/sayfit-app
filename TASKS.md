@@ -118,6 +118,37 @@ Product-led growth loop (Jack won't grind content). **Own the share template** �
 
 ---
 
+# Tier 3 — "Everything app" pillars (T19–T23, from STRATEGY.md Addendum)
+
+These turn SayFit from an MFP+lifting replacement into the all-in-one **self-directed health protocol** app. **HARD GATE: none of these is built until the core loop (voice lifts + photo macros + adaptive TDEE + "am I winning?" dashboard) is proven sticky.** The moat pair (T21 biomarker fusion + T19 protocol) is the ONE thing worth pulling early once the core retains — it's the defensible core no incumbent can copy (they lack the training/nutrition half) and its window is ~12–18 months. T22/T23 are LATER.
+
+**App Store gate:** CONDITIONAL-GO — public build = generic "medication & protocol tracker" (user-typed doses only, clinical copy, disclaimers, first-run acknowledgment gate); PED-cycle vocabulary (on/off-cycle, PCT, blast-and-cruise) stays behind a **config flag in the personal/TestFlight build only**. Never ship an auto-calculated dose or market a "dosage calculator" (guideline 1.4.2). Track-don't-prescribe is a permanent design constraint.
+
+## Model/effort per task (Tier 3)
+Opus 4.8 medium → T19 (protocol/dose data-integrity), T21 (biomarker OCR ingest + overlay correctness). Sonnet 4.6 low–med → T20, T22, T23 (reminders/meal-plan/mobility UI behind a test gate). **Run `/code-review high` + the security gate before T19/T21 ship (health PII + HealthKit surface 5.1.3).**
+
+## T19 — Hormone/peptide protocol tracker  ·  M  ·  [MOAT]  ·  blockedBy: core loop proven; pairs with T21  ·  /code-review high
+Generic compound tracker: user defines ANY compound (name, dose, unit, schedule), logs dose/site/timing, injection-site rotation map. Public-build framing = "medication & protocol tracker" with first-run acknowledgment gate + disclaimers ("informational only, not medical advice"; "only track substances legally prescribed/obtained"). **Dose entry always user-typed + user-confirmed — no auto-calc.** PED-cycle vocab (on/off-cycle, PCT) behind a personal-build config flag. Seed default = Jack's own protocol (200mg/wk test + retatrutide) for dogfood. Skip: PK ester-curve modeling.
+- files: new `src/services/protocol.js`, protocol screen, config-flag plumbing, `app.json` (store copy audit)
+
+## T20 — Supplement/med AM-PM reminder stack  ·  S  ·  [RETENTION]  ·  blockedBy: T19 (shares reminder infra)
+AM/PM "stack" checklist anchored onto the existing weigh-in/workout-log moment (prompt where motivation already is). Streak **with a grace mechanic** (freeze/partial decay, never hard-reset — shame-inducing for medical stakes). Tiered notifications: gentle nudge for supplements, alarm-style for TRT-injection/peptide days. Seed default = Jack's real stack (creatine, electrolytes, fish oil, citrus bergamot, boron, multi). Skip: drug-interaction checks, refill tracking, caregiver escalation.
+- files: `src/services/protocol.js`, notification service, dashboard checklist component
+
+## T21 — Biomarker/bloodwork trend ingest + fused overlay  ·  M→L  ·  [MOAT — the fusion half]  ·  blockedBy: core loop proven; pairs with T19  ·  /code-review high
+The defensible core. OCR/PDF/manual ingest of lab panels from **any** provider (Quest, LabCorp, Function, Marek). Overlay chart plots T / E2 / hematocrit / lipids / A1C **on the same timeline as lift PRs, body-comp, and macro adherence** — the "am I winning on my health markers?" view no incumbent ships. LATER (L): AI-coach causal insight ("hematocrit up 3 panels as volume climbed"; "E2 spike tracks refeed carbs"). Jack's own two panels (Jan/May, lipids+E2+T trend) are the test fixtures. Skip: running blood draws; supplement-upsell funnel. HealthKit surface → verify guideline 5.1.3.
+- files: new `src/services/biomarkers.js`, OCR/ingest (vision Edge Function clone of estimate-macros), overlay chart on `DashboardScreen.js`
+
+## T22 — Meal-plan / anchor-meals + grocery + prep  ·  M  ·  [PARITY, differentiated]  ·  LATER (after moat)
+Productizes Jack's manual cut workflow. Anchor-meal library (repetition as a feature — "cut mode" deliberately boring/cheap/locked), auto-schedule anchors to close the day's remaining macro gap, batch-scaled consolidated grocery list, templated prep steps, **manual per-staple price field** → "this week ≈ $X" (cost+macro combo no competitor ships). Generate from macros + logged history SayFit already owns. Skip: recipe-discovery/variety engine, live retailer price APIs. (Jack already has a working prototype — the claude.ai "Cut Dashboard" artifact — to port the UX from.)
+- files: new `src/services/mealPlan.js`, meal-plan + grocery screens
+
+## T23 — Mobility/prehab screen + desk-break flow  ·  M  ·  [NICE-TO-HAVE]  ·  LATER (after moat)
+Periodic **mobility screen** (10-part assessment, à la GOWOD) → a mobility score over time that plugs into the "am I winning?" framing (more defensible IP than video). Short daily desk-break routine driven from a small (10–20) GIF/static exercise library, targeting desk-posture back/neck (the underserved niche). Skip: produced-video instructor library, 30-day programs (that's a content business — license or link out).
+- files: new `src/services/mobility.js`, mobility screen + routine player, small asset library
+
+---
+
 ## Known limitations to document (not blockers, from critic LOW findings)
 - `getOverloadSuggestion`/`getSmartRestDuration` hardcode lb plate math (50/135/225, weight≥185) — wrong for kg users. Branch on `profile.units` or document "assumes lbs". Matters since Jack dogfoods.
 - BRIEF dashboard lists body **measurements** + cardio/active-energy; measurements has no task yet, and cardio is Apple-gated. Don't run the daily-use kill test against an intentionally incomplete dashboard.
