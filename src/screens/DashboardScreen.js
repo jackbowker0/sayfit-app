@@ -9,7 +9,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
-import { Settings, ChevronRight, Check, Calendar, Flame, Zap, Moon, Trophy } from 'lucide-react-native';
+import {
+  Settings, ChevronRight, Check, Calendar, Flame, Zap, Moon, Trophy,
+  Dumbbell, Camera, Pill, Syringe, Scale, TestTube,
+} from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
@@ -18,11 +21,17 @@ import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme'
 import { useTheme } from '../hooks/useTheme';
 import { formatTime } from '../utils/helpers';
 import { getWorkoutHistory, buildMemorySummary, deleteWorkout } from '../services/storage';
-import { getUserProfile, isTodayWorkoutDay, getNextWorkoutDay } from '../services/userProfile';
+import { getUserProfile, isTodayWorkoutDay, getNextWorkoutDay, getMacroTargets } from '../services/userProfile';
 import { getRecentAchievements, getAchievementStats, TIER_CONFIG } from '../services/achievements';
 import { getMuscleIcon, getAchievementIcon, getTierIcon } from '../constants/icons';
+import { getWeightStats, getWeightChartData } from '../services/bodyWeight';
+import { getNutritionStats } from '../services/nutrition';
+import { getProtocolStats, hasAcknowledgedProtocolDisclaimer } from '../services/protocol';
+import { getExerciseLog } from '../services/exerciseLog';
 import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
+import WinningVerdict from '../components/WinningVerdict';
+import ActionTile from '../components/ActionTile';
 import WeightCard from '../components/WeightCard';
 import NutritionCard from '../components/NutritionCard';
 import ProtocolCard from '../components/ProtocolCard';
@@ -83,6 +92,7 @@ export default function DashboardScreen({ navigation }) {
   const [recentBadges, setRecentBadges] = useState([]);
   const [achievementStats, setAchievementStats] = useState(null);
   const [weightKey, setWeightKey] = useState(0);
+  const [hubStats, setHubStats] = useState(null);
   const [selectedWorkout, setSelectedWorkout] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState(null);
@@ -105,6 +115,32 @@ export default function DashboardScreen({ navigation }) {
     if (profile.preferredMode) setPreferredMode(profile.preferredMode);
     const badges = await getRecentAchievements(7); setRecentBadges(badges);
     const aStats = await getAchievementStats(); setAchievementStats(aStats);
+
+    // ---- Hub stats: one fetch shared by the verdict + the action tiles ----
+    // Reloaded in lockstep with everything else (useFocusEffect + pull-to-refresh).
+    try {
+      const targets = await getMacroTargets();
+      const [wStats, wChart, nStats, pStats, pAck, exLog] = await Promise.all([
+        getWeightStats(),
+        getWeightChartData(14),
+        getNutritionStats(targets),
+        getProtocolStats(),
+        hasAcknowledgedProtocolDisclaimer(),
+        getExerciseLog(),
+      ]);
+      // exLog is NOT date-sorted — reduce for the max date, don't trust order.
+      const lastWorkoutDate = exLog.length
+        ? exLog.reduce((m, s) => (new Date(s.date) > new Date(m) ? s.date : m), exLog[0].date)
+        : null;
+      setHubStats({
+        wStats, wChart, nStats, pStats, pAck,
+        lastWorkoutDate,
+        units: profile.units || 'lbs',
+      });
+    } catch (e) {
+      console.warn('[Dashboard] Failed to load hub stats:', e);
+    }
+
     setLoading(false);
     hasLoaded.current = true;
   };
@@ -185,6 +221,115 @@ export default function DashboardScreen({ navigation }) {
     return { text: { drill: `${remaining} workouts left this week.`, hype: `${remaining} more to hit your goal!`, zen: `${remaining} sessions remain.` }[coachId], cta: isLogger ? "Log Workout" : "Start Workout", action: goPrimary, icon: isLogger ? '📝' : '🏋️', ...(isBoth ? { secondaryCta: isLogger ? "Coach Me" : "Just Log", secondaryAction: isLogger ? goWorkout : goLog } : {}) };
   };
 
+  // ---- Action tiles: shortcut + status, driven by the shared hub fetch ----
+  // Every tile navigates to a route that exists (App.js), except Bloodwork
+  // which has no store/route yet and renders as an honest disabled "Soon" tile.
+  // Protocol tiles gate on the disclaimer ack — pre-ack they show "Tap to set up",
+  // never the seeded default numbers as if the user configured them.
+  const buildTiles = () => {
+    const h = hubStats || {};
+    const w = h.wStats || {};
+    const n = h.nStats || {};
+    const p = h.pStats || {};
+    const ack = h.pAck === true;
+    const units = h.units || 'lbs';
+    const lastWorkoutDate = h.lastWorkoutDate || null;
+
+    // Log Workout
+    const daysSinceWorkout = lastWorkoutDate
+      ? Math.floor((Date.now() - new Date(lastWorkoutDate).getTime()) / 86400000)
+      : null;
+    let workoutStatus;
+    if (daysSinceWorkout === null) workoutStatus = 'Not logged';
+    else if (daysSinceWorkout === 0) workoutStatus = 'Logged today';
+    else if (daysSinceWorkout === 1) workoutStatus = '1d ago';
+    else workoutStatus = `${daysSinceWorkout}d ago`;
+    const workoutTile = {
+      key: 'workout',
+      Icon: Dumbbell,
+      label: 'Log Workout',
+      status: workoutStatus,
+      attention: (todayIsPlanned && !todayDone) ? 'due' : 'none',
+      onPress: goLog,
+    };
+
+    // Snap Meal
+    const pending = n.pendingCount || 0;
+    const meals = n.mealCount || 0;
+    let mealStatus;
+    if (pending > 0) mealStatus = `${pending} to review`;
+    else if (meals > 0) mealStatus = `${meals} logged today`;
+    else mealStatus = 'No meals today';
+    const mealTile = {
+      key: 'meal',
+      Icon: Camera,
+      label: 'Snap Meal',
+      status: mealStatus,
+      attention: pending > 0 ? 'due' : 'none',
+      onPress: () => navigation.navigate('Nutrition'),
+    };
+
+    // Supplements (gated on ack)
+    const suppTotal = p.supplementsTotal || 0;
+    const suppDone = p.supplementsDone || 0;
+    let suppStatus, suppAttention;
+    if (!ack) { suppStatus = 'Tap to set up'; suppAttention = 'none'; }
+    else if (suppTotal > 0 && suppDone >= suppTotal) { suppStatus = `${suppDone}/${suppTotal} done`; suppAttention = 'done'; }
+    else if (suppTotal > 0) { suppStatus = `${suppDone}/${suppTotal} done`; suppAttention = 'due'; }
+    else { suppStatus = 'None set'; suppAttention = 'none'; }
+    const suppTile = {
+      key: 'supplements',
+      Icon: Pill,
+      label: 'Supplements',
+      status: suppStatus,
+      attention: suppAttention,
+      onPress: () => navigation.navigate('Protocol'),
+    };
+
+    // Injection (gated on ack)
+    let injStatus, injAttention;
+    if (!ack) { injStatus = 'Tap to set up'; injAttention = 'none'; }
+    else if (p.injectionDueToday) { injStatus = `Due: ${p.nextDose?.name || 'today'}`; injAttention = 'due'; }
+    else { injStatus = 'None due today'; injAttention = 'none'; }
+    const injTile = {
+      key: 'injection',
+      Icon: Syringe,
+      label: 'Injection',
+      status: injStatus,
+      attention: injAttention,
+      onPress: () => navigation.navigate('Protocol'),
+    };
+
+    // Log Weight
+    const daysSinceWeight = w.currentDate
+      ? Math.floor((Date.now() - new Date(w.currentDate).getTime()) / 86400000)
+      : null;
+    let weightTimeAgo = '';
+    if (daysSinceWeight === 0) weightTimeAgo = 'today';
+    else if (daysSinceWeight === 1) weightTimeAgo = 'yesterday';
+    else if (daysSinceWeight !== null) weightTimeAgo = `${daysSinceWeight}d ago`;
+    const weightTile = {
+      key: 'weight',
+      Icon: Scale,
+      label: 'Log Weight',
+      status: w.current != null ? `${w.current} ${units} · ${weightTimeAgo}` : 'Not logged',
+      attention: (w.current != null && daysSinceWeight !== null && daysSinceWeight >= 7) ? 'due' : 'none',
+      onPress: () => navigation.navigate('Weight'),
+    };
+
+    // Bloodwork — no store/route yet: honest disabled "Soon" tile.
+    const bloodTile = {
+      key: 'bloodwork',
+      Icon: TestTube,
+      label: 'Bloodwork',
+      status: 'Soon',
+      attention: 'none',
+      disabled: true,
+    };
+
+    return [workoutTile, mealTile, suppTile, injTile, weightTile, bloodTile];
+  };
+
   if (loading) return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -194,6 +339,7 @@ export default function DashboardScreen({ navigation }) {
   );
 
   const nudge = getNudge();
+  const tiles = buildTiles();
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
@@ -236,10 +382,38 @@ export default function DashboardScreen({ navigation }) {
           </TouchableOpacity>
         </FadeInView>
 
-        {/* Coach Nudge */}
+        {/* "Am I winning?" verdict — the top status readout */}
+        <WinningVerdict navigation={navigation} hubStats={hubStats} />
+
+        {/* TODAY — action tiles: shortcut + status, 2 x 3 grid */}
+        <FadeInView delay={120} style={{ marginBottom: SPACING.md }}>
+          <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: SPACING.sm }}>Today</Text>
+          <View style={{ gap: SPACING.md }}>
+            {[[0, 1], [2, 3], [4, 5]].map((pair, row) => (
+              <View key={row} style={{ flexDirection: 'row', gap: SPACING.md }}>
+                {pair.map((idx) => {
+                  const t = tiles[idx];
+                  return (
+                    <ActionTile
+                      key={t.key}
+                      Icon={t.Icon}
+                      label={t.label}
+                      status={t.status}
+                      attention={t.attention}
+                      onPress={t.onPress}
+                      disabled={t.disabled}
+                    />
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </FadeInView>
+
+        {/* Coach Nudge — "what should I do next?" (verdict answers "how am I doing?") */}
         {nudge && (
           <GlassCard
-            fadeDelay={100}
+            fadeDelay={160}
             accentColor={coach.color}
             glow
           >
@@ -267,7 +441,7 @@ export default function DashboardScreen({ navigation }) {
         )}
 
         {/* Weekly Progress Card */}
-        <GlassCard fadeDelay={150}>
+        <GlassCard fadeDelay={200}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <Text style={{ ...FONT.label, color: colors.textMuted }}>This Week</Text>
             <TouchableOpacity onPress={() => { haptics.tap(); navigation.navigate('Calendar'); }} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="View calendar" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
