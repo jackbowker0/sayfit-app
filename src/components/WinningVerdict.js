@@ -268,7 +268,7 @@ export default function WinningVerdict({ navigation, hubStats }) {
     <GlassCard fadeDelay={80}>
       {v.tappable ? (
         <TouchableOpacity
-          onPress={() => navigation.navigate('LogTab')}
+          onPress={() => navigation.navigate('LogWorkout')}
           activeOpacity={0.8}
           accessible
           accessibilityRole="button"

@@ -11,7 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
   Settings, ChevronRight, Check, Calendar, Flame, Zap, Moon, Trophy,
-  Dumbbell, Camera, Pill, Syringe, Scale, TestTube,
+  Dumbbell, Camera, Pill, Syringe, Scale, TestTube, Users,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -21,13 +21,10 @@ import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme'
 import { useTheme } from '../hooks/useTheme';
 import { formatTime } from '../utils/helpers';
 import { getWorkoutHistory, buildMemorySummary, deleteWorkout } from '../services/storage';
-import { getUserProfile, isTodayWorkoutDay, getNextWorkoutDay, getMacroTargets } from '../services/userProfile';
+import { getUserProfile, isTodayWorkoutDay, getNextWorkoutDay } from '../services/userProfile';
 import { getRecentAchievements, getAchievementStats, TIER_CONFIG } from '../services/achievements';
 import { getMuscleIcon, getAchievementIcon, getTierIcon } from '../constants/icons';
-import { getWeightStats, getWeightChartData } from '../services/bodyWeight';
-import { getNutritionStats } from '../services/nutrition';
-import { getProtocolStats, hasAcknowledgedProtocolDisclaimer } from '../services/protocol';
-import { getExerciseLog } from '../services/exerciseLog';
+import { loadHubStats } from '../hooks/useHubStats';
 import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
 import WinningVerdict from '../components/WinningVerdict';
@@ -38,6 +35,7 @@ import ProtocolCard from '../components/ProtocolCard';
 import WorkoutDetailSheet from '../components/WorkoutDetailSheet';
 import AchievementDetailSheet from '../components/AchievementDetailSheet';
 import AccountabilityWidget from '../components/AccountabilityWidget';
+import QuickAddMic from '../components/QuickAddMic';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -118,28 +116,10 @@ export default function DashboardScreen({ navigation }) {
 
     // ---- Hub stats: one fetch shared by the verdict + the action tiles ----
     // Reloaded in lockstep with everything else (useFocusEffect + pull-to-refresh).
-    try {
-      const targets = await getMacroTargets();
-      const [wStats, wChart, nStats, pStats, pAck, exLog] = await Promise.all([
-        getWeightStats(),
-        getWeightChartData(14),
-        getNutritionStats(targets),
-        getProtocolStats(),
-        hasAcknowledgedProtocolDisclaimer(),
-        getExerciseLog(),
-      ]);
-      // exLog is NOT date-sorted — reduce for the max date, don't trust order.
-      const lastWorkoutDate = exLog.length
-        ? exLog.reduce((m, s) => (new Date(s.date) > new Date(m) ? s.date : m), exLog[0].date)
-        : null;
-      setHubStats({
-        wStats, wChart, nStats, pStats, pAck,
-        lastWorkoutDate,
-        units: profile.units || 'lbs',
-      });
-    } catch (e) {
-      console.warn('[Dashboard] Failed to load hub stats:', e);
-    }
+    // Extracted to loadHubStats() so the Dashboard, Coach hub, and
+    // WinningVerdict all read the SAME shape and never drift.
+    const stats = await loadHubStats(profile);
+    if (stats) setHubStats(stats);
 
     setLoading(false);
     hasLoaded.current = true;
@@ -161,9 +141,9 @@ export default function DashboardScreen({ navigation }) {
 
   const isLogger = preferredMode === 'logger';
   const isBoth = preferredMode === 'both';
-  const goPrimary = () => { haptics.medium(); navigation.navigate(isLogger ? 'LogTab' : 'WorkoutTab'); };
-  const goLog = () => { haptics.tap(); navigation.navigate('LogTab'); };
-  const goWorkout = () => { haptics.medium(); navigation.navigate('WorkoutTab'); };
+  const goPrimary = () => { haptics.medium(); navigation.navigate(isLogger ? 'LogWorkout' : 'BuildWorkout'); };
+  const goLog = () => { haptics.tap(); navigation.navigate('LogWorkout'); };
+  const goWorkout = () => { haptics.medium(); navigation.navigate('BuildWorkout'); };
 
   const getGreeting = () => { const h = new Date().getHours(); if (h < 12) return 'Good morning'; if (h < 17) return 'Good afternoon'; return 'Good evening'; };
 
@@ -266,7 +246,7 @@ export default function DashboardScreen({ navigation }) {
       label: 'Snap Meal',
       status: mealStatus,
       attention: pending > 0 ? 'due' : 'none',
-      onPress: () => navigation.navigate('Nutrition'),
+      onPress: () => navigation.navigate('FuelTab'),
     };
 
     // Supplements (gated on ack)
@@ -283,7 +263,7 @@ export default function DashboardScreen({ navigation }) {
       label: 'Supplements',
       status: suppStatus,
       attention: suppAttention,
-      onPress: () => navigation.navigate('Protocol'),
+      onPress: () => navigation.navigate('ProtocolTab'),
     };
 
     // Injection (gated on ack)
@@ -297,7 +277,7 @@ export default function DashboardScreen({ navigation }) {
       label: 'Injection',
       status: injStatus,
       attention: injAttention,
-      onPress: () => navigation.navigate('Protocol'),
+      onPress: () => navigation.navigate('ProtocolTab'),
     };
 
     // Log Weight
@@ -343,7 +323,7 @@ export default function DashboardScreen({ navigation }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
-      <ScrollView contentContainerStyle={{ padding: SPACING.screenPadding, paddingBottom: 20 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor={coach.color} />}>
+      <ScrollView contentContainerStyle={{ padding: SPACING.screenPadding, paddingBottom: 100 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await loadData(); setRefreshing(false); }} tintColor={coach.color} />}>
 
         {/* Header */}
         <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }} accessible accessibilityRole="header">
@@ -370,16 +350,28 @@ export default function DashboardScreen({ navigation }) {
               )}
             </View>
           </View>
-          <TouchableOpacity
-            onPress={() => { haptics.tap(); navigation.navigate('Settings'); }}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel="Settings"
-            style={{ paddingTop: 4, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Settings size={18} color={colors.textMuted} strokeWidth={1.8} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); navigation.navigate('SocialFeed'); }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Social feed"
+              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Users size={18} color={colors.textMuted} strokeWidth={1.8} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); navigation.navigate('Settings'); }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Settings size={18} color={colors.textMuted} strokeWidth={1.8} />
+            </TouchableOpacity>
+          </View>
         </FadeInView>
 
         {/* "Am I winning?" verdict — the top status readout */}
@@ -415,7 +407,6 @@ export default function DashboardScreen({ navigation }) {
           <GlassCard
             fadeDelay={160}
             accentColor={coach.color}
-            glow
           >
             <TouchableOpacity onPress={nudge.action} activeOpacity={0.8} accessible accessibilityRole="button" accessibilityLabel={`${nudge.cta}. ${nudge.text}`}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
@@ -622,7 +613,10 @@ export default function DashboardScreen({ navigation }) {
         )}
       </ScrollView>
 
-      <WorkoutDetailSheet workout={selectedWorkout} visible={detailVisible} onClose={closeWorkoutDetail} onDoAgain={(w) => { navigation.navigate('WorkoutTab', { repeatWorkout: w }); }} onDelete={async (w) => { await deleteWorkout(w.id); closeWorkoutDetail(); loadData(); }} />
+      {/* Universal quick-add mic — floats over the tab bar */}
+      <QuickAddMic navigation={navigation} />
+
+      <WorkoutDetailSheet workout={selectedWorkout} visible={detailVisible} onClose={closeWorkoutDetail} onDoAgain={(w) => { navigation.navigate('BuildWorkout', { repeatWorkout: w }); }} onDelete={async (w) => { await deleteWorkout(w.id); closeWorkoutDetail(); loadData(); }} />
       <AchievementDetailSheet badge={selectedBadge} visible={badgeDetailVisible} onClose={closeBadgeDetail} />
     </SafeAreaView>
   );

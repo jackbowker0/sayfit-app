@@ -99,7 +99,7 @@ export default function ProgressScreen({ navigation }) {
             <Text style={[FONT.caption, { color: colors.textMuted, marginBottom: 20 }]}>Log a workout to start tracking</Text>
             <TouchableOpacity
               style={{ backgroundColor: coach.color, paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.md }}
-              onPress={() => { haptics.tap(); navigation.navigate('LogTab'); }}
+              onPress={() => { haptics.tap(); navigation.navigate('LogWorkout'); }}
               activeOpacity={0.8}
               accessibilityRole="button"
             >

@@ -117,7 +117,7 @@ export default function PRWallScreen({ navigation }) {
               marginTop: 20, backgroundColor: coach.color,
               paddingHorizontal: 24, paddingVertical: 12, borderRadius: RADIUS.md,
             }}
-            onPress={() => { haptics.tap(); navigation.navigate('LogTab'); }}
+            onPress={() => { haptics.tap(); navigation.navigate('LogWorkout'); }}
             activeOpacity={0.8}
           >
             <Text style={[FONT.caption, { fontWeight: '700', color: '#fff' }]}>Log a Workout</Text>

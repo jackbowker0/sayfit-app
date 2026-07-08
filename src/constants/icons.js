@@ -78,12 +78,14 @@ import {
 } from 'lucide-react-native';
 
 // ---- TAB BAR ----
+// Phase-2 IA: Home | Train | Fuel | Protocol | Coach.
+// All five icons are already imported above → no new package imports.
 export const TAB_ICONS = {
   home: Home,
   train: Dumbbell,
-  log: ClipboardList,
-  community: Users,
-  progress: TrendingUp,
+  fuel: UtensilsCrossed,
+  protocol: Syringe,
+  coach: MessageCircle,
 };
 
 // ---- COACH IDENTITY ----

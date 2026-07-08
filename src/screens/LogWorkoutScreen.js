@@ -21,6 +21,7 @@ try {
   useSpeechRecognitionEvent = SpeechRec.useSpeechRecognitionEvent;
 } catch (_) {}
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
   Dumbbell, Footprints, Trophy, Clock, Plus, Minus, X, Check, Search,
@@ -315,6 +316,7 @@ export default function LogWorkoutScreen({ navigation }) {
   const { coachId } = useWorkoutContext();
   const coach = COACHES[coachId];
   const { colors, isDark } = useTheme();
+  const route = useRoute();
 
   const [mode, setMode] = useState('text');
   const [textInput, setTextInput] = useState('');
@@ -359,6 +361,16 @@ export default function LogWorkoutScreen({ navigation }) {
   const textInputRef = useRef();
 
   useEffect(() => { loadTemplates(); loadProfile(); loadRecents(); loadNudges(); }, []);
+
+  // QuickAddMic entry: land straight on the voice panel, then self-clear the
+  // param (mirrors JustTalkScreen's repeatWorkout pattern) so a later focus
+  // without the param doesn't force voice mode again.
+  useEffect(() => {
+    if (route.params?.startVoice) {
+      setMode('voice');
+      navigation.setParams({ startVoice: undefined });
+    }
+  }, [route.params?.startVoice]);
 
   // ─── VOICE: speech recognition events (no-op in Expo Go) ──────
   useSpeechRecognitionEvent('start', () => setIsListening(true));

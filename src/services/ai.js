@@ -254,6 +254,9 @@ function getMemoryPrefix(coachId, command, memory) {
  * Get a memory-aware greeting for the home screen or just talk
  */
 export async function getCoachGreeting(coachId) {
+  // Normalize once: an unknown/stale coachId would make every dictionary
+  // lookup below return undefined and render "undefined" in the UI.
+  if (!COACHES[coachId]) coachId = 'hype';
   const memory = await getMemory();
   const profile = await getProfile();
   const name = profile?.name || '';

@@ -334,7 +334,7 @@ export default function CalendarScreen({ navigation }) {
         visible={detailVisible}
         onClose={closeWorkoutDetail}
         onDoAgain={(w) => {
-          navigation.navigate('WorkoutTab', { repeatWorkout: w });
+          navigation.navigate('BuildWorkout', { repeatWorkout: w });
         }}
         onDelete={async (w) => {
           await deleteWorkout(w.id);

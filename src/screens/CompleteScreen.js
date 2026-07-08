@@ -376,7 +376,9 @@ export default function CompleteScreen({ navigation, route }) {
   const handleNewWorkout = () => {
     haptics.tap();
     if (!isLoggedWorkout && guidedReset) guidedReset();
-    navigation.replace('MainTabs', { screen: isLoggedWorkout ? 'LogTab' : 'WorkoutTab' });
+    // Phase-2 IA: LogTab/WorkoutTab retired — land on the Train hub, which
+    // fronts both Log Workout and Build Workout.
+    navigation.replace('MainTabs', { screen: 'TrainTab' });
   };
 
   const coachSummary = isLoggedWorkout

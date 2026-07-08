@@ -12,19 +12,19 @@ import { useTheme } from '../hooks/useTheme';
 import { SPACING, TIMING } from '../constants/theme';
 
 const ROUTE_TO_ICON = {
-  DashboardTab: 'home',
-  WorkoutTab: 'train',
-  LogTab: 'log',
-  CommunityTab: 'community',
-  ProgressTab: 'progress',
+  HomeTab: 'home',
+  TrainTab: 'train',
+  FuelTab: 'fuel',
+  ProtocolTab: 'protocol',
+  CoachTab: 'coach',
 };
 
 const ROUTE_LABELS = {
-  DashboardTab: 'Home',
-  WorkoutTab: 'Train',
-  LogTab: 'Gym Log',
-  CommunityTab: 'Community',
-  ProgressTab: 'Progress',
+  HomeTab: 'Home',
+  TrainTab: 'Train',
+  FuelTab: 'Fuel',
+  ProtocolTab: 'Protocol',
+  CoachTab: 'Coach',
 };
 
 export default function TabBar({ state, descriptors, navigation, coachColor }) {

@@ -23,6 +23,8 @@ import { COACHES } from './src/constants/coaches';
 import WorkoutScreen from './src/screens/WorkoutScreen';
 import CompleteScreen from './src/screens/CompleteScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
+import TrainScreen from './src/screens/TrainScreen';
+import CoachScreen from './src/screens/CoachScreen';
 import JustTalkScreen from './src/screens/JustTalkScreen';
 import LogWorkoutScreen from './src/screens/LogWorkoutScreen';
 import ProgressScreen from './src/screens/ProgressScreen';
@@ -72,11 +74,11 @@ function HomeTabs() {
       tabBar={(props) => <TabBar {...props} coachColor={coachColor} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen name="DashboardTab" component={DashboardScreen} />
-      <Tab.Screen name="WorkoutTab" component={JustTalkScreen} />
-      <Tab.Screen name="LogTab" component={LogWorkoutScreen} />
-      <Tab.Screen name="CommunityTab" component={SocialFeedScreen} />
-      <Tab.Screen name="ProgressTab" component={ProgressScreen} />
+      <Tab.Screen name="HomeTab" component={DashboardScreen} />
+      <Tab.Screen name="TrainTab" component={TrainScreen} />
+      <Tab.Screen name="FuelTab" component={NutritionScreen} />
+      <Tab.Screen name="ProtocolTab" component={ProtocolScreen} />
+      <Tab.Screen name="CoachTab" component={CoachScreen} />
     </Tab.Navigator>
   );
 }
@@ -132,9 +134,12 @@ function AppInner({ onboarded, needsTutorial }) {
             <Stack.Screen name="Tutorial" component={TutorialScreen} options={{ gestureEnabled: false }} />
           )}
           <Stack.Screen name="MainTabs" component={HomeTabs} />
+          {/* Promoted from retired tabs — kept reachable as pushed Stack screens */}
+          <Stack.Screen name="Progress" component={ProgressScreen} />
+          <Stack.Screen name="LogWorkout" component={LogWorkoutScreen} />
+          <Stack.Screen name="BuildWorkout" component={JustTalkScreen} />
+          <Stack.Screen name="SocialFeed" component={SocialFeedScreen} />
           <Stack.Screen name="Weight" component={WeightScreen} />
-          <Stack.Screen name="Nutrition" component={NutritionScreen} />
-          <Stack.Screen name="Protocol" component={ProtocolScreen} />
           <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="Achievements" component={AchievementsScreen} />

@@ -42,7 +42,7 @@ export default function NutritionCard({ navigation }) {
 
   const handlePress = () => {
     haptics.tap();
-    if (navigation) navigation.navigate('Nutrition');
+    if (navigation) navigation.navigate('FuelTab');
   };
 
   const hasData = stats && stats.mealCount > 0;

@@ -39,7 +39,7 @@ export default function ProtocolCard({ navigation }) {
 
   const handlePress = () => {
     haptics.tap();
-    if (navigation) navigation.navigate('Protocol');
+    if (navigation) navigation.navigate('ProtocolTab');
   };
 
   // Only surface protocol specifics (summary + due-glow) once the user has

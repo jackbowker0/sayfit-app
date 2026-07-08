@@ -16,11 +16,8 @@ const linking = {
   prefixes: ['sayfit://'],
   config: {
     screens: {
-      MainTabs: {
-        screens: {
-          CommunityTab: 'feed',
-        },
-      },
+      // Phase-2 IA: the feed is a root Stack screen now (no CommunityTab).
+      SocialFeed: 'feed',
       PostDetail: 'post/:postId',
       UserProfile: 'profile/:userId',
       ChallengeDetail: 'challenge/:challengeId',
