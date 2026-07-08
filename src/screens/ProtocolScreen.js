@@ -16,7 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import GlassCard from '../components/GlassCard';
 import {
-  Syringe, Pill, CalendarClock, Check, ChevronLeft, Plus, Trash2,
+  Syringe, Pill, CalendarClock, Check, Plus, Trash2,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -345,13 +345,6 @@ export default function ProtocolScreen({ navigation }) {
               Track your medication & protocol
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-          >
-            <ChevronLeft size={16} color={coach.color} strokeWidth={2.5} />
-            <Text style={{ ...FONT.caption, color: coach.color, fontWeight: '600' }}>Back</Text>
-          </TouchableOpacity>
         </FadeInView>
 
         {/* ---- Persistent disclaimer banner ---- */}

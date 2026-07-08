@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, ChevronLeft, Flame, Beef, Apple, Trash2,
+  UtensilsCrossed, Flame, Beef, Apple, Trash2,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -195,13 +195,6 @@ export default function NutritionScreen({ navigation }) {
               Track your meals and macros
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-          >
-            <ChevronLeft size={16} color={coach.color} strokeWidth={2.5} />
-            <Text style={{ ...FONT.caption, color: coach.color, fontWeight: '600' }}>Back</Text>
-          </TouchableOpacity>
         </FadeInView>
 
         {/* ---- Today's totals header card ---- */}

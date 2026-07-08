@@ -26,6 +26,7 @@ import FadeInView from '../components/FadeInView';
 import {
   Dumbbell, Footprints, Trophy, Clock, Plus, Minus, X, Check, Search,
   ClipboardList, Save, Play, Pause, Timer, ArrowUp, ArrowDown, RefreshCw, Mic,
+  ChevronLeft,
 } from 'lucide-react-native';
 import { COACH_ICONS, getMuscleIcon } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
@@ -892,6 +893,18 @@ export default function LogWorkoutScreen({ navigation }) {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); navigation.goBack(); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', minHeight: 44, marginBottom: 4 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <ChevronLeft size={16} color={coach.color} strokeWidth={2.5} />
+              <Text style={{ ...FONT.caption, color: coach.color, fontWeight: '600' }}>Back</Text>
+            </TouchableOpacity>
+          )}
           <Text style={{ ...FONT.title, color: colors.textPrimary, marginBottom: 4 }}>Log Workout</Text>
           <Text style={{ ...FONT.body, fontSize: 14, color: colors.textMuted, marginBottom: 16 }}>Track your lifts and see progress</Text>
 

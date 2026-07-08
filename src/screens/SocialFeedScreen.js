@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FadeInView from '../components/FadeInView';
-import { Users, Compass, CircleUser } from 'lucide-react-native';
+import { Users, Compass, CircleUser, ChevronLeft } from 'lucide-react-native';
 
 import { AuthContext } from '../context/AuthContext';
 import AuthGate from '../components/AuthGate';
@@ -156,7 +156,22 @@ export default function SocialFeedScreen({ navigation }) {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.textPrimary }]}>Community</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {navigation.canGoBack() && (
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                style={[styles.profileBtn, {
+                  backgroundColor: colors.glassBg,
+                  borderColor: colors.glassBorder,
+                }]}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ChevronLeft size={20} color={colors.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Community</Text>
+          </View>
           <TouchableOpacity
             onPress={() => navigation.navigate('UserProfile', { userId: null })}
             style={[styles.profileBtn, {

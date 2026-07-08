@@ -10,7 +10,7 @@ import {
 import Svg, { Polyline, Circle, Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { TrendingUp, TrendingDown, BarChart3, Scale, Trophy } from 'lucide-react-native';
+import { TrendingUp, TrendingDown, BarChart3, Scale, Trophy, ChevronLeft } from 'lucide-react-native';
 import FadeInView from '../components/FadeInView';
 import { getMuscleIcon } from '../constants/icons';
 import GlassCard from '../components/GlassCard';
@@ -86,6 +86,18 @@ export default function ProgressScreen({ navigation }) {
         }
       >
         <FadeInView>
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); navigation.goBack(); }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', minHeight: 44, marginBottom: 4 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <ChevronLeft size={16} color={coach.color} strokeWidth={2.5} />
+              <Text style={[FONT.caption, { color: coach.color, fontWeight: '600' }]}>Back</Text>
+            </TouchableOpacity>
+          )}
           <Text style={[FONT.title, { color: colors.textPrimary, marginBottom: 4 }]}>Progress</Text>
           <Text style={[FONT.caption, { color: colors.textMuted, marginBottom: 20 }]}>
             {summaries.length > 0 ? `${summaries.length} exercises tracked` : 'Log workouts to see progress'}
