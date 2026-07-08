@@ -11,7 +11,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import FadeInView from './FadeInView';
 import { useTheme } from '../hooks/useTheme';
-import { RADIUS, SPACING, GLOW } from '../constants/theme';
+import { RADIUS, SPACING } from '../constants/theme';
 
 export default function GlassCard({
   children,
@@ -33,15 +33,7 @@ export default function GlassCard({
       borderTopColor: colors.glassHighlight,
       padding: noPadding ? 0 : SPACING.md,
     },
-    // Neon glow in dark mode
-    glow && isDark && accentColor && {
-      shadowColor: accentColor,
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.15,
-      shadowRadius: GLOW.md,
-      elevation: 4,
-    },
-    // Light mode shadow
+    // Light mode shadow (dark mode uses surface lightness + hairline, no glow)
     !isDark && {
       shadowColor: 'rgba(0,0,0,0.06)',
       shadowOffset: { width: 0, height: 2 },

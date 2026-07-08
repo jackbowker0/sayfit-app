@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, AppState } from 'react-native';
+import { View, ActivityIndicator, AppState, Text, TextInput } from 'react-native';
+import { useFonts } from 'expo-font';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -43,6 +44,14 @@ import ChallengeDetailScreen from './src/screens/ChallengeDetailScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import PRWallScreen from './src/screens/PRWallScreen';
 import { hasOnboarded, getUserProfile } from './src/services/userProfile';
+
+// Route every <Text>/<TextInput> through Hanken Grotesk by default so the whole
+// app adopts the brand face instead of the system font. FONT tokens set the
+// per-weight family; this default covers all other text.
+[Text, TextInput].forEach((Comp) => {
+  Comp.defaultProps = Comp.defaultProps || {};
+  Comp.defaultProps.style = [{ fontFamily: 'Hanken-Regular' }, Comp.defaultProps.style];
+});
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -146,6 +155,12 @@ function AppInner({ onboarded, needsTutorial }) {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    'Hanken-Regular': require('./assets/fonts/HankenGrotesk-400.ttf'),
+    'Hanken-Medium': require('./assets/fonts/HankenGrotesk-500.ttf'),
+    'Hanken-SemiBold': require('./assets/fonts/HankenGrotesk-600.ttf'),
+    'Hanken-Bold': require('./assets/fonts/HankenGrotesk-700.ttf'),
+  });
   const [checking, setChecking] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
   const [needsTutorial, setNeedsTutorial] = useState(false);
@@ -171,9 +186,9 @@ export default function App() {
     init();
   }, []);
 
-  if (checking) {
+  if (checking || (!fontsLoaded && !fontError)) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#0A0A0F', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: '#0B0B0C', justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator color="#ffffff40" size="large" />
       </View>
     );

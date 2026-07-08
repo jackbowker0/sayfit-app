@@ -1,111 +1,118 @@
 // ============================================================
 // THEME — Design system for SayFit
 //
-// Light + Dark palettes with auto-detection.
-// The old COLORS export is kept for backward compatibility
-// so un-updated screens don't break.
+// Rebrand 2026-07-08: clean neutral darks, ONE restrained amber
+// accent (no per-coach color noise), solid surfaces + hairlines
+// (glassmorphism removed), glow removed, Hanken Grotesk type.
 //
-// New screens should use: const { colors } = useTheme();
+// Screens use: const { colors } = useTheme();
+// Token NAMES are unchanged — only values — so every screen
+// restyles at once without edits.
 // ============================================================
 
+// The one brand accent — a refined amber. Premium, athletic, and
+// colorblind-safe (distinguishable across all CB types). Reserved
+// for ~10% of the UI (primary actions, active states, "due").
+const ACCENT = '#F0913A';
+
 export const lightPalette = {
-  // Backgrounds
-  bg: '#F5F5F7',
+  // Backgrounds — off-white, never pure #fff
+  bg: '#FAFAFA',
   bgCard: '#FFFFFF',
-  bgCardHover: '#F0F0F2',
-  bgOverlay: 'rgba(0,0,0,0.4)',
+  bgCardHover: '#F4F4F5',
+  bgOverlay: 'rgba(20,21,23,0.4)',
   bgElevated: '#FFFFFF',
-  bgInput: '#F0F0F2',
-  bgSubtle: '#E8E8ED',
+  bgInput: '#F4F4F5',
+  bgSubtle: '#EFEFF1',
 
-  // Text
-  textPrimary: '#1A1A1A',
-  textSecondary: '#6B6B6B',
-  textMuted: '#9A9A9A',
-  textDim: '#C0C0C0',
-  textOnAccent: '#FFFFFF',
+  // Text — off-black, never pure #000
+  textPrimary: '#18191B',
+  textSecondary: '#5B5D63',
+  textMuted: '#8A8C93',
+  textDim: '#B8BAC0',
+  textOnAccent: '#1A1206',
 
-  // Borders
-  border: 'rgba(0,0,0,0.08)',
-  borderLight: 'rgba(0,0,0,0.04)',
-  borderFocus: 'rgba(0,0,0,0.15)',
+  // Borders — soft hairlines
+  border: 'rgba(20,21,23,0.09)',
+  borderLight: 'rgba(20,21,23,0.05)',
+  borderFocus: 'rgba(20,21,23,0.18)',
 
-  // Semantic
-  red: '#FF3B30',
-  orange: '#FF6B35',
-  yellow: '#FFCC00',
-  green: '#34C759',
-  blue: '#007AFF',
-  purple: '#AF52DE',
-  heartRate: '#FF3B30',
+  // Semantic — desaturated, deliberate (not the clrs.cc crayons)
+  red: '#D64550',
+  orange: ACCENT,
+  yellow: '#D89B2E',
+  green: '#2E9E77',
+  blue: '#3B7FD4',
+  purple: '#8A5FC7',
+  accent: ACCENT,
+  heartRate: '#D64550',
 
-  // Shadows (light mode only — dark mode uses borders)
-  shadow: 'rgba(0,0,0,0.06)',
-  shadowMd: 'rgba(0,0,0,0.1)',
+  // Elevation via layered soft shadows (light mode only)
+  shadow: 'rgba(20,21,23,0.06)',
+  shadowMd: 'rgba(20,21,23,0.10)',
 
-  // Glass-morphism
-  glassBg: 'rgba(255, 255, 255, 0.8)',
-  glassBorder: 'rgba(0,0,0,0.06)',
-  glassHighlight: 'rgba(255,255,255,0.5)',
-  bgGradientStart: '#F5F5F7',
-  bgGradientEnd: '#EEEEF2',
+  // (kept keys — now SOLID surfaces, not glass)
+  glassBg: '#FFFFFF',
+  glassBorder: 'rgba(20,21,23,0.09)',
+  glassHighlight: 'rgba(20,21,23,0.03)',
+  bgGradientStart: '#FAFAFA',
+  bgGradientEnd: '#FAFAFA',
   bgSheet: '#FFFFFF',
-  bgSheetHandle: 'rgba(0,0,0,0.15)',
+  bgSheetHandle: 'rgba(20,21,23,0.16)',
 };
 
 export const darkPalette = {
-  // Backgrounds
-  bg: '#0A0A0F',
-  bgCard: '#161620',
-  bgCardHover: '#1E1E2A',
-  bgOverlay: 'rgba(0,0,0,0.7)',
-  bgElevated: '#1C1C28',
-  bgInput: '#12121C',
-  bgSubtle: '#1A1A26',
+  // Backgrounds — clean near-neutral darks (killed the blue-purple murk)
+  bg: '#0B0B0C',
+  bgCard: '#141517',
+  bgCardHover: '#1B1C1F',
+  bgOverlay: 'rgba(0,0,0,0.72)',
+  bgElevated: '#1B1C1F',
+  bgInput: '#141517',
+  bgSubtle: '#1B1C1F',
 
-  // Text
-  textPrimary: '#F5F5F7',
-  textSecondary: 'rgba(255,255,255,0.65)',
-  textMuted: 'rgba(255,255,255,0.4)',
-  textDim: 'rgba(255,255,255,0.2)',
-  textOnAccent: '#FFFFFF',
+  // Text — off-white ramp
+  textPrimary: '#F4F4F5',
+  textSecondary: '#A2A3A9',
+  textMuted: '#6A6C72',
+  textDim: 'rgba(255,255,255,0.22)',
+  textOnAccent: '#1A1206',
 
-  // Borders
+  // Borders — hairlines
   border: 'rgba(255,255,255,0.08)',
-  borderLight: 'rgba(255,255,255,0.04)',
-  borderFocus: 'rgba(255,255,255,0.15)',
+  borderLight: 'rgba(255,255,255,0.05)',
+  borderFocus: 'rgba(255,255,255,0.16)',
 
-  // Semantic
-  red: '#FF4136',
-  orange: '#FF6B35',
-  yellow: '#FFDC00',
-  green: '#2ECC40',
-  blue: '#7FDBFF',
-  purple: '#B10DC9',
-  heartRate: '#FF4136',
+  // Semantic — desaturated for a dark ground
+  red: '#E5565F',
+  orange: ACCENT,
+  yellow: '#E3B341',
+  green: '#3FB489',
+  blue: '#5B93E6',
+  purple: '#9E77D6',
+  accent: ACCENT,
+  heartRate: '#E5565F',
 
-  // Shadows (not really visible in dark, but kept for consistency)
-  shadow: 'rgba(0,0,0,0.3)',
-  shadowMd: 'rgba(0,0,0,0.5)',
+  // Dark elevation comes from surface lightness + hairline, not shadow
+  shadow: 'rgba(0,0,0,0.4)',
+  shadowMd: 'rgba(0,0,0,0.6)',
 
-  // Glass-morphism
-  glassBg: 'rgba(22, 22, 32, 0.7)',
-  glassBorder: 'rgba(255,255,255,0.06)',
-  glassHighlight: 'rgba(255,255,255,0.03)',
-  bgGradientStart: '#0A0A0F',
-  bgGradientEnd: '#0F0F1A',
-  bgSheet: '#1A1A28',
-  bgSheetHandle: 'rgba(255,255,255,0.15)',
+  // (kept keys — now SOLID surfaces, not glass)
+  glassBg: '#141517',
+  glassBorder: 'rgba(255,255,255,0.08)',
+  glassHighlight: 'rgba(255,255,255,0.05)',
+  bgGradientStart: '#0B0B0C',
+  bgGradientEnd: '#0B0B0C',
+  bgSheet: '#141517',
+  bgSheetHandle: 'rgba(255,255,255,0.18)',
 };
 
 // ---- BACKWARD COMPATIBILITY ----
-// Old screens import { COLORS } — this maps to dark palette
-// so nothing breaks until screens are updated to useTheme()
+// Old screens import { COLORS } — maps to dark palette so nothing breaks.
 export const COLORS = {
   ...darkPalette,
-  // Legacy aliases that old screens use
-  bgCard: '#ffffff06',
-  bgCardHover: '#ffffff0a',
+  bgCard: '#141517',
+  bgCardHover: '#1B1C1F',
 };
 
 export const SPACING = {
@@ -127,16 +134,18 @@ export const RADIUS = {
 };
 
 // ---- TYPOGRAPHY ----
+// Hanken Grotesk (bundled, loaded via useFonts in App.js). Family carries the
+// weight (static faces), so we set fontFamily per token rather than fontWeight.
 export const FONT = {
-  hero: { fontSize: 34, fontWeight: '800', letterSpacing: -0.8 },
-  title: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  heading: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
-  subhead: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2 },
-  body: { fontSize: 15, fontWeight: '400', lineHeight: 22 },
-  caption: { fontSize: 12, fontWeight: '500' },
-  label: { fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
-  stat: { fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  statLg: { fontSize: 36, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  hero:    { fontFamily: 'Hanken-Bold',     fontSize: 32, letterSpacing: -0.8 },
+  title:   { fontFamily: 'Hanken-Bold',     fontSize: 25, letterSpacing: -0.5 },
+  heading: { fontFamily: 'Hanken-SemiBold', fontSize: 20, letterSpacing: -0.3 },
+  subhead: { fontFamily: 'Hanken-SemiBold', fontSize: 16, letterSpacing: -0.1 },
+  body:    { fontFamily: 'Hanken-Regular',  fontSize: 15, lineHeight: 22 },
+  caption: { fontFamily: 'Hanken-Medium',   fontSize: 13 },
+  label:   { fontFamily: 'Hanken-SemiBold', fontSize: 11, letterSpacing: 0.9, textTransform: 'uppercase' },
+  stat:    { fontFamily: 'Hanken-Bold',     fontSize: 22, letterSpacing: -0.4, fontVariant: ['tabular-nums'] },
+  statLg:  { fontFamily: 'Hanken-Bold',     fontSize: 34, letterSpacing: -0.6, fontVariant: ['tabular-nums'] },
 };
 
 // ---- ANIMATION TIMING ----
@@ -148,24 +157,25 @@ export const TIMING = {
   springBouncy: { damping: 12, stiffness: 180 },
 };
 
-// ---- GLOW SIZES ----
+// ---- GLOW (deprecated — kept as no-ops so any remaining refs don't neon) ----
 export const GLOW = {
-  sm: 4,
-  md: 8,
-  lg: 16,
+  sm: 0,
+  md: 0,
+  lg: 0,
 };
 
 // ---- HELPERS ----
 export function getIntensityColor(level) {
-  if (level >= 8) return '#FF4136';
-  if (level >= 5) return '#FFDC00';
-  return '#2ECC40';
+  if (level >= 8) return '#E5565F';
+  if (level >= 5) return '#E3B341';
+  return '#3FB489';
 }
 
 /**
- * Get text color for use on a coach color background.
- * Yellow needs dark text; everything else uses white.
+ * Text color to sit on an accent-colored background. The amber accent and any
+ * yellow are light — they need dark text; everything else uses white.
  */
 export function getTextOnColor(coachColor) {
-  return coachColor === '#FFDC00' || coachColor === '#FFCC00' ? '#000' : '#fff';
+  const light = ['#F0913A', '#FFDC00', '#FFCC00', '#E3B341', '#D89B2E'];
+  return light.includes(coachColor) ? '#1A1206' : '#FFFFFF';
 }
