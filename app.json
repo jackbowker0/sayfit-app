@@ -12,7 +12,8 @@
       [
         "expo-camera",
         { "cameraPermission": "Allow SayFit to use the camera to scan food barcodes." }
-      ]
+      ],
+      "./plugins/withFreeTeamEntitlements.js"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
