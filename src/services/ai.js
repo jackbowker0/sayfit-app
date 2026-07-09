@@ -480,6 +480,45 @@ ${coach.name}:`;
 }
 
 /**
+ * Parse a spoken/typed meal description into food items to look up.
+ * "I ate 3 eggs and toast" -> [{ query: 'eggs', grams: 150 }, { query: 'toast', grams: 56 }].
+ * Returns an array, or null if the AI is unavailable / the parse failed (the
+ * caller then falls back to manual search). Grams are estimates the user reviews.
+ */
+export async function parseFoodText(text) {
+  const t = (text || '').trim();
+  if (!t) return [];
+  if (!isAIAvailable()) return null;
+
+  const prompt = `Parse this spoken meal description into foods. Return ONLY a JSON array, no prose and no markdown fences. Each item: {"query":"<concise food name to search a nutrition database>","grams":<estimated grams for the amount said>}. Estimate grams from the amount using typical sizes: 1 large egg ~50g, 1 slice bread ~28g, 1 cup cooked rice ~195g, 1 medium chicken breast ~170g, 1 medium banana ~118g, 1 tbsp oil/butter ~14g, 1 cup milk ~240g. If no amount is given, assume one typical serving. Keep queries generic (e.g. "eggs", "white rice", "chicken breast").
+
+Meal: "${t.replace(/"/g, "'")}"
+JSON:`;
+
+  try {
+    const res = await fetch(COACH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ prompt, max_tokens: 300 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data.text || '';
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    if (start < 0 || end <= start) return null;
+    const arr = JSON.parse(raw.slice(start, end + 1));
+    if (!Array.isArray(arr)) return null;
+    return arr
+      .filter((x) => x && x.query)
+      .map((x) => ({ query: String(x.query).trim(), grams: Math.max(1, Math.round(Number(x.grams) || 100)) }));
+  } catch (e) {
+    console.warn('[AI] parseFoodText failed:', e.message);
+    return null;
+  }
+}
+
+/**
  * Check if the AI service is available (proxy configured)
  */
 export function isAIAvailable() {

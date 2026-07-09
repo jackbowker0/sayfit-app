@@ -248,3 +248,25 @@ export async function addRecentFood(food) {
   const deduped = [food, ...recents.filter((f) => f.id !== food.id)].slice(0, RECENTS_MAX);
   await safeWriteArray(RECENTS_KEY, deduped);
 }
+
+// ---- VOICE / PARSED-ITEM RESOLUTION ----
+
+/**
+ * Resolve parsed items ([{ query, grams }]) to real foods + macros.
+ * Each -> { query, grams, food|null, macros|null }. Runs the lookups
+ * concurrently. An item with no DB match keeps food: null so the UI can
+ * show it as unmatched (drop it or log it manually).
+ */
+export async function resolveFoodItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  return Promise.all(list.map(async (it) => {
+    const results = await searchFoods(it.query, { limit: 1 });
+    const food = results[0] || null;
+    return {
+      query: it.query,
+      grams: it.grams,
+      food,
+      macros: food ? macrosForPortion(food, it.grams) : null,
+    };
+  }));
+}

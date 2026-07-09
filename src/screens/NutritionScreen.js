@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode, TrendingUp,
+  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode, TrendingUp, Mic,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -31,6 +31,7 @@ import { capture } from '../services/posthog';
 import GlassCard from '../components/GlassCard';
 import FoodSearchModal from '../components/FoodSearchModal';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
+import VoiceFoodModal from '../components/VoiceFoodModal';
 
 // Capitalise first letter
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -89,6 +90,7 @@ export default function NutritionScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [foodSearchVisible, setFoodSearchVisible] = useState(false);
   const [scanVisible, setScanVisible] = useState(false);
+  const [voiceVisible, setVoiceVisible] = useState(false);
   const [initialFood, setInitialFood] = useState(null); // seeds the portion step (from a scan)
   const [foodSource, setFoodSource] = useState('manual'); // 'manual' | 'search' | 'barcode'
 
@@ -496,6 +498,18 @@ export default function NutritionScreen({ navigation }) {
             >
               <ScanBarcode size={18} color={coach.color} strokeWidth={2.4} />
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); setVoiceVisible(true); }}
+              activeOpacity={0.8}
+              style={{
+                width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md,
+                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Log a meal by voice"
+            >
+              <Mic size={18} color={coach.color} strokeWidth={2.4} />
+            </TouchableOpacity>
           </View>
 
           {/* Description (optional) */}
@@ -667,6 +681,16 @@ export default function NutritionScreen({ navigation }) {
         onFound={handleScanFound}
         coachColor={coach.color}
         colors={colors}
+      />
+
+      <VoiceFoodModal
+        visible={voiceVisible}
+        onClose={() => setVoiceVisible(false)}
+        onLogged={loadData}
+        mealType={mealType}
+        coachColor={coach.color}
+        colors={colors}
+        energyLabel={energyLabel}
       />
     </SafeAreaView>
   );
