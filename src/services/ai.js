@@ -13,7 +13,13 @@
 
 import { COACHES, getFallbackResponse } from '../constants/coaches';
 import { buildMemorySummary, buildCoachMemoryString } from './storage';
-import { getUserProfile, buildProfilePromptString } from './userProfile';
+import { getUserProfile, buildProfilePromptString, getMacroTargets } from './userProfile';
+import { getNutritionStats } from './nutrition';
+import { getWeightStats } from './bodyWeight';
+import { getPRs } from './exerciseLog';
+import { getProtocolStats, hasAcknowledgedProtocolDisclaimer } from './protocol';
+
+const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
 
 // ---- CONFIGURATION ----
 // Replace with your actual Supabase project URL
@@ -315,6 +321,157 @@ export async function getCoachGreeting(coachId) {
     hype: `${name ? name + '! ' : ''}Ready for something awesome? Let's GO! 🔥`,
     zen: `${name ? 'Welcome, ' + name + '. ' : 'Welcome. '}Let's find your flow today.`,
   }[coachId];
+}
+
+// ============================================================
+// DATA-GROUNDED COACH — the "narrator" rebuild
+// ------------------------------------------------------------
+// askCoach answers a free-text question by first assembling the
+// user's REAL numbers (training, PRs, nutrition, body weight,
+// protocol adherence) into a snapshot, then prompting the model to
+// cite those numbers, stay specific, take corrections, and route
+// anything medical to their provider. This is the opposite of the
+// old canned "Motivate me" command — it does something the user
+// can't do themselves (read across all their data) and outputs
+// something specific and checkable.
+// ============================================================
+
+// Compact, factual snapshot of everything the coach can see. Honest by design:
+// missing data is stated as missing, never fabricated.
+async function buildCoachDataSnapshot(memory, profile) {
+  const units = profile?.units || 'lbs';
+  const targets = await getMacroTargets().catch(() => ({}));
+  const [nStats, wStats, prs, pStats, pAck] = await Promise.all([
+    getNutritionStats(targets).catch(() => null),
+    getWeightStats().catch(() => null),
+    getPRs().catch(() => ({})),
+    getProtocolStats().catch(() => null),
+    hasAcknowledgedProtocolDisclaimer().catch(() => false),
+  ]);
+
+  const lines = [];
+
+  // Training
+  if (memory && !memory.isFirstWorkout) {
+    const t = [`${memory.totalWorkouts} workouts total`, `${memory.thisWeekCount} this week`];
+    if (memory.streak > 0) t.push(`${memory.streak}-day streak`);
+    let s = 'Training: ' + t.join(', ') + '.';
+    if (memory.lastWorkout?.name) s += ` Last: "${memory.lastWorkout.name}"${memory.daysSinceLast != null ? ` ${memory.daysSinceLast}d ago` : ''}.`;
+    if (memory.neglectedMuscles?.length) s += ` Under-trained: ${memory.neglectedMuscles.slice(0, 3).join(', ')}.`;
+    lines.push(s);
+  } else {
+    lines.push('Training: no workouts logged yet.');
+  }
+
+  // Top PRs by weight
+  const prList = Object.entries(prs || {})
+    .filter(([, v]) => v?.maxWeight > 0)
+    .sort((a, b) => b[1].maxWeight - a[1].maxWeight)
+    .slice(0, 5)
+    .map(([name, v]) => `${name} ${v.maxWeight}${units}`);
+  if (prList.length) lines.push('PRs: ' + prList.join(', ') + '.');
+
+  // Nutrition today
+  if (nStats && (nStats.mealCount > 0 || (nStats.totals && nStats.totals.kcal > 0))) {
+    const tt = nStats.totals || {};
+    const tg = nStats.targets || {};
+    let s = `Nutrition today: ${tt.kcal || 0}${tg.kcal ? '/' + tg.kcal : ''} kcal, ${tt.protein || 0}${tg.protein ? '/' + tg.protein : ''}g protein.`;
+    if (nStats.pendingCount > 0) s += ` ${nStats.pendingCount} meal(s) pending review.`;
+    lines.push(s);
+  } else {
+    lines.push('Nutrition: nothing logged today.');
+  }
+
+  // Body weight + trend
+  if (wStats && wStats.current != null) {
+    let s = `Body weight: ${wStats.current}${units}`;
+    if (wStats.weekChange != null) s += `, ${wStats.weekChange >= 0 ? '+' : ''}${round1(wStats.weekChange)} this week`;
+    if (wStats.monthChange != null) s += `, ${wStats.monthChange >= 0 ? '+' : ''}${round1(wStats.monthChange)} this month`;
+    lines.push(s + '.');
+  }
+
+  // Protocol adherence — FACTS ONLY, and only once the disclaimer is acknowledged.
+  if (pAck && pStats) {
+    const parts = [];
+    if (pStats.injectionDueToday) parts.push('a dose is due today');
+    else if (pStats.scheduledCount) parts.push('doses done for today');
+    if (pStats.supplementsTotal > 0) parts.push(`supplements ${pStats.supplementsDone}/${pStats.supplementsTotal}`);
+    if (parts.length) lines.push('Protocol: ' + parts.join(', ') + '. (State these facts only — never give medical or dosing advice.)');
+  }
+
+  return lines.join('\n');
+}
+
+// Offline/errored fallback — still grounded in a real fact, never generic hype.
+function coachDataFallback(memory) {
+  const bits = [];
+  if (memory && !memory.isFirstWorkout) {
+    if (memory.streak > 0) bits.push(`${memory.streak}-day streak`);
+    bits.push(`${memory.thisWeekCount} workout${memory.thisWeekCount === 1 ? '' : 's'} this week`);
+    if (memory.neglectedMuscles?.length) bits.push(`${memory.neglectedMuscles[0]} could use work`);
+  }
+  const fact = bits.length ? bits.join(', ') + '.' : 'Log a workout or a meal and I can read your numbers.';
+  return `${fact} (Offline — reconnect for a full read.)`;
+}
+
+/**
+ * Answer a free-text question grounded in the user's real data.
+ * @param {string} coachId
+ * @param {string} userMessage
+ * @param {{history?: Array<{q:string,a:string}>}} opts recent Q/A turns for context
+ */
+export async function askCoach(coachId, userMessage, { history = [] } = {}) {
+  if (!COACHES[coachId]) coachId = 'hype';
+  const coach = COACHES[coachId];
+  const memory = await getMemory();
+  const profile = await getProfile();
+
+  if (!isAIAvailable()) {
+    _lastResponseWasFallback = true;
+    return coachDataFallback(memory);
+  }
+
+  try {
+    const snapshot = await buildCoachDataSnapshot(memory, profile);
+    const profileString = buildProfilePromptString(profile);
+    const historyBlock = (history || [])
+      .slice(-4)
+      .map((m) => `User: ${m.q}\n${coach.name}: ${m.a}`)
+      .join('\n');
+
+    const prompt = `${coach.personality}
+
+You are ${coach.name}, this person's coach inside the SayFit app. You can see their REAL data below.
+${profileString ? '\nWHO: ' + profileString + '\n' : ''}
+DATA SNAPSHOT (real numbers — cite these; never invent others):
+${snapshot}
+
+RULES:
+- Ground every claim in the numbers above and cite specific figures. If the data doesn't answer their question, say what's missing — never make up numbers.
+- Be specific and useful. No empty hype or generic motivation.
+- If they correct you, accept it and adjust.
+- MEDICAL SAFETY: never recommend, calculate, or change any medication/peptide/hormone dose, and never give medical advice. You may state the tracking facts shown above. For anything about doses, symptoms, or bloodwork, tell them to check with their healthcare provider.
+- 2-4 sentences, in ${coach.name}'s voice. No quotation marks.
+${historyBlock ? '\nRecent conversation:\n' + historyBlock + '\n' : ''}
+User: ${userMessage}
+${coach.name}:`;
+
+    const response = await fetch(COACH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ prompt, max_tokens: 300 }),
+    });
+    if (!response.ok) { _lastResponseWasFallback = true; return coachDataFallback(memory); }
+    const data = await response.json();
+    const text = data.text?.trim();
+    if (!text) { _lastResponseWasFallback = true; return coachDataFallback(memory); }
+    _lastResponseWasFallback = false;
+    return text;
+  } catch (error) {
+    console.warn('[AI] askCoach failed:', error.message);
+    _lastResponseWasFallback = true;
+    return coachDataFallback(memory);
+  }
 }
 
 /**
