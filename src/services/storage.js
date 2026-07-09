@@ -84,31 +84,35 @@ function getMuscleBreakdown(workouts) {
   return counts;
 }
 
+// LOCAL-timezone YYYY-MM-DD day key (matches protocol/nutrition/bodyWeight).
+function localDayKey(d) {
+  const dt = new Date(d);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
 function getStreak(history) {
   if (history.length === 0) return 0;
 
-  const uniqueDays = [...new Set(
-    history.map(w => {
-      const d = new Date(w.date);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    })
-  )].sort((a, b) => b - a);
+  const days = new Set(history.map(w => localDayKey(w.date)));
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayTime = today.getTime();
-  const yesterdayTime = todayTime - 86400000;
+  // Step backwards one CALENDAR day at a time. Anchoring at noon means a
+  // setDate(-1) step never lands on the same day across a DST change — the old
+  // code subtracted a fixed 86,400,000 ms, so the 25-hour fall-back day broke
+  // the streak (and disagreed with the calendar's own count).
+  const cursor = new Date();
+  cursor.setHours(12, 0, 0, 0);
+  const todayKey = localDayKey(cursor);
+  const yesterday = new Date(cursor);
+  yesterday.setDate(yesterday.getDate() - 1);
 
-  if (uniqueDays[0] !== todayTime && uniqueDays[0] !== yesterdayTime) return 0;
+  if (!days.has(todayKey) && !days.has(localDayKey(yesterday))) return 0;
+  if (!days.has(todayKey)) cursor.setDate(cursor.getDate() - 1); // streak ends yesterday
 
-  let streak = 1;
-  for (let i = 1; i < uniqueDays.length; i++) {
-    if (uniqueDays[i] === uniqueDays[i - 1] - 86400000) {
-      streak++;
-    } else {
-      break;
-    }
+  let streak = 0;
+  while (days.has(localDayKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
 }

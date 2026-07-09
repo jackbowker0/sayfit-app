@@ -25,6 +25,15 @@ import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
 import WorkoutDetailSheet from '../components/WorkoutDetailSheet';
 
+// LOCAL-timezone YYYY-MM-DD — matches the grid cells (built from local Y/M/D)
+// and the dashboard streak. UTC keys mis-plotted evening workouts onto the next
+// day and made this screen's streak disagree with the dashboard's.
+function localDayKey(d) {
+  const dt = new Date(d);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -57,13 +66,13 @@ export default function CalendarScreen({ navigation }) {
     const byDay = {};
 
     workoutHistory.forEach(w => {
-      const day = new Date(w.date).toISOString().split('T')[0];
+      const day = localDayKey(w.date);
       map[day] = (map[day] || 0) + 1;
       if (!byDay[day]) byDay[day] = [];
       byDay[day].push(w);
     });
     exerciseLog.forEach(e => {
-      const day = new Date(e.date).toISOString().split('T')[0];
+      const day = localDayKey(e.date);
       map[day] = (map[day] || 0) + 1;
       if (!byDay[day]) byDay[day] = [];
       const alreadyCovered = byDay[day].some(w => w.source === 'log');
@@ -96,22 +105,28 @@ export default function CalendarScreen({ navigation }) {
   };
 
   const calculateStreaks = (sortedDays) => {
-    let longest = 1, current = 0, streak = 1;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
-    const yesterdayStr = new Date(today - 86400000).toISOString().split('T')[0];
+    if (sortedDays.length === 0) return { longest: 0, current: 0 };
+    const dayset = new Set(sortedDays);
+
+    // Step CALENDAR days from a noon anchor so a DST change never lands twice on
+    // the same day (the old `/86400000` diff broke on the 25-hour fall-back day).
+    const stepBack = (date) => { const d = new Date(date); d.setDate(d.getDate() - 1); return d; };
+
+    // Longest run of consecutive calendar days.
+    let longest = 1, streak = 1;
     for (let i = 1; i < sortedDays.length; i++) {
-      const diff = (new Date(sortedDays[i]) - new Date(sortedDays[i - 1])) / 86400000;
-      if (diff === 1) { streak++; longest = Math.max(longest, streak); } else { streak = 1; }
+      const gapIsOne = localDayKey(stepBack(new Date(sortedDays[i] + 'T12:00:00'))) === sortedDays[i - 1];
+      if (gapIsOne) { streak++; longest = Math.max(longest, streak); } else { streak = 1; }
     }
-    if (sortedDays.includes(todayStr) || sortedDays.includes(yesterdayStr)) {
-      const startDay = sortedDays.includes(todayStr) ? todayStr : yesterdayStr;
-      current = 1;
-      let checkDate = new Date(startDay);
-      for (let i = sortedDays.length - 1; i >= 0; i--) {
-        checkDate = new Date(checkDate - 86400000);
-        if (sortedDays.includes(checkDate.toISOString().split('T')[0])) current++; else break;
-      }
+
+    // Current streak, anchored to today or yesterday.
+    let current = 0;
+    const cursor = new Date(); cursor.setHours(12, 0, 0, 0);
+    const todayStr = localDayKey(cursor);
+    const yesterdayStr = localDayKey(stepBack(cursor));
+    if (dayset.has(todayStr) || dayset.has(yesterdayStr)) {
+      let walk = dayset.has(todayStr) ? new Date(cursor) : stepBack(cursor);
+      while (dayset.has(localDayKey(walk))) { current++; walk = stepBack(walk); }
     }
     return { longest, current };
   };
@@ -128,7 +143,7 @@ export default function CalendarScreen({ navigation }) {
     for (let i = 0; i < startDow; i++) grid.push(null);
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      grid.push({ day: d, dateStr, count: activityMap[dateStr] || 0, isToday: dateStr === new Date().toISOString().split('T')[0], isFuture: new Date(dateStr) > new Date() });
+      grid.push({ day: d, dateStr, count: activityMap[dateStr] || 0, isToday: dateStr === localDayKey(new Date()), isFuture: new Date(dateStr) > new Date() });
     }
     return grid;
   };
