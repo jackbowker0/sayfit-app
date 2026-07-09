@@ -12,6 +12,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeReadArray, safeWriteArray } from './safeStore';
 
 // ---- KEYS ----
 const PROTOCOL_COMPOUNDS_KEY = 'sayfit_protocol_compounds';
@@ -215,13 +216,8 @@ export async function clearCompounds() {
 // ---- DOSE LOG (READ / WRITE) ----
 
 export async function getDoseEntries() {
-  try {
-    const raw = await AsyncStorage.getItem(PROTOCOL_DOSE_LOG_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[Protocol] Failed to load dose log:', e);
-    return [];
-  }
+  // Medication log — quarantine a corrupt blob, never erase it via the next write.
+  return safeReadArray(PROTOCOL_DOSE_LOG_KEY);
 }
 
 export async function logDose({
@@ -243,7 +239,7 @@ export async function logDose({
       editState: editState || 'pending',
     };
     entries.push(entry);
-    await AsyncStorage.setItem(PROTOCOL_DOSE_LOG_KEY, JSON.stringify(entries));
+    await safeWriteArray(PROTOCOL_DOSE_LOG_KEY, entries);
     return entry;
   } catch (e) {
     console.warn('[Protocol] Failed to save dose:', e);
@@ -265,7 +261,7 @@ export async function updateDose(entryId, updates = {}) {
       next.editState = 'user_edited';
     }
     entries[idx] = next;
-    await AsyncStorage.setItem(PROTOCOL_DOSE_LOG_KEY, JSON.stringify(entries));
+    await safeWriteArray(PROTOCOL_DOSE_LOG_KEY, entries);
     return next;
   } catch (e) {
     console.warn('[Protocol] Failed to update dose:', e);
@@ -282,7 +278,7 @@ export async function deleteDose(entryId) {
   try {
     const entries = await getDoseEntries();
     const filtered = entries.filter(e => e.id !== entryId);
-    await AsyncStorage.setItem(PROTOCOL_DOSE_LOG_KEY, JSON.stringify(filtered));
+    await safeWriteArray(PROTOCOL_DOSE_LOG_KEY, filtered);
     return true;
   } catch (e) {
     return false;
@@ -366,13 +362,8 @@ export async function clearSupplementStack() {
 // ---- STACK CHECK-OFF LOG (READ / WRITE) ----
 
 export async function getStackLog() {
-  try {
-    const raw = await AsyncStorage.getItem(PROTOCOL_STACK_LOG_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[Protocol] Failed to load stack log:', e);
-    return [];
-  }
+  // Quarantines a corrupt blob instead of returning [] into the next write.
+  return safeReadArray(PROTOCOL_STACK_LOG_KEY);
 }
 
 // Toggle a stack item's taken-state for a given day. Idempotent per (itemId, day):
@@ -386,7 +377,7 @@ export async function toggleStackTaken(itemId, date = null) {
     const next = present
       ? log.filter(l => !(l.itemId === itemId && dayKey(l.date) === key)) // un-check: remove all matching
       : [...log, { id: `${itemId}|${key}`, itemId, date: date || new Date().toISOString() }];
-    await AsyncStorage.setItem(PROTOCOL_STACK_LOG_KEY, JSON.stringify(next));
+    await safeWriteArray(PROTOCOL_STACK_LOG_KEY, next);
     return !present;                 // true = now taken, false = now un-taken
   } catch (e) {
     console.warn('[Protocol] Failed to toggle stack item:', e);

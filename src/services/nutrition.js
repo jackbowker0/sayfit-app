@@ -12,6 +12,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeReadArray, safeWriteArray } from './safeStore';
 
 const NUTRITION_KEY = 'sayfit_nutrition_log';
 
@@ -56,13 +57,8 @@ function sumMacros(entries) {
 // ---- READ / WRITE ----
 
 export async function getNutritionEntries() {
-  try {
-    const raw = await AsyncStorage.getItem(NUTRITION_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[Nutrition] Failed to load:', e);
-    return [];
-  }
+  // Quarantines a corrupt blob instead of returning [] into the next write.
+  return safeReadArray(NUTRITION_KEY);
 }
 
 /**
@@ -88,7 +84,7 @@ export async function logMeal({
       editState: editState || (source === 'manual' ? 'confirmed' : 'ai_estimated'),
     };
     entries.push(entry);
-    await AsyncStorage.setItem(NUTRITION_KEY, JSON.stringify(entries));
+    await safeWriteArray(NUTRITION_KEY, entries);
     return entry;
   } catch (e) {
     console.warn('[Nutrition] Failed to save:', e);
@@ -115,7 +111,7 @@ export async function updateMeal(entryId, updates = {}) {
       next.editState = 'user_edited';
     }
     entries[idx] = next;
-    await AsyncStorage.setItem(NUTRITION_KEY, JSON.stringify(entries));
+    await safeWriteArray(NUTRITION_KEY, entries);
     return next;
   } catch (e) {
     console.warn('[Nutrition] Failed to update:', e);
@@ -132,7 +128,7 @@ export async function deleteMeal(entryId) {
   try {
     const entries = await getNutritionEntries();
     const filtered = entries.filter(e => e.id !== entryId);
-    await AsyncStorage.setItem(NUTRITION_KEY, JSON.stringify(filtered));
+    await safeWriteArray(NUTRITION_KEY, filtered);
     return true;
   } catch (e) {
     return false;

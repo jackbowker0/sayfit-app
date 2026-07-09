@@ -14,19 +14,15 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { updateChallengeProgress } from './challenges';
+import { safeReadArray, safeWriteArray } from './safeStore';
 
 const STORAGE_KEY = 'sayfit_history';
 
 // ---- READ / WRITE ----
 
 export async function getWorkoutHistory() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[Storage] Failed to load history:', e);
-    return [];
-  }
+  // Quarantines a corrupt blob instead of returning [] into the next write.
+  return safeReadArray(STORAGE_KEY);
 }
 
 export async function saveWorkout(workoutData) {
@@ -38,7 +34,7 @@ export async function saveWorkout(workoutData) {
       ...workoutData,
     };
     history.push(entry);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    await safeWriteArray(STORAGE_KEY, history);
 
     // Update any active challenge progress in the background
     updateChallengeProgress(entry).catch(e =>
@@ -56,7 +52,7 @@ export async function deleteWorkout(workoutId) {
   try {
     const history = await getWorkoutHistory();
     const filtered = history.filter(w => w.id !== workoutId);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    await safeWriteArray(STORAGE_KEY, filtered);
     return true;
   } catch (e) {
     console.warn('[Storage] Failed to delete workout:', e);

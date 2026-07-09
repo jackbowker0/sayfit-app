@@ -6,6 +6,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeReadArray, safeWriteArray } from './safeStore';
 
 const WEIGHT_KEY = 'sayfit_body_weight';
 // Old WeightScreen wrote to this separate key, creating a split-brain where
@@ -23,13 +24,8 @@ function localDayKey(dateIso) {
 // ---- READ / WRITE ----
 
 export async function getWeightEntries() {
-  try {
-    const raw = await AsyncStorage.getItem(WEIGHT_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[BodyWeight] Failed to load:', e);
-    return [];
-  }
+  // Quarantines a corrupt blob instead of returning [] into the next write.
+  return safeReadArray(WEIGHT_KEY);
 }
 
 /**
@@ -60,7 +56,7 @@ export async function saveWeight(weight, date = null) {
     // Sort by date
     entries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    await AsyncStorage.setItem(WEIGHT_KEY, JSON.stringify(entries));
+    await safeWriteArray(WEIGHT_KEY, entries);
     return entry;
   } catch (e) {
     console.warn('[BodyWeight] Failed to save:', e);
@@ -72,7 +68,7 @@ export async function deleteWeightEntry(entryId) {
   try {
     const entries = await getWeightEntries();
     const filtered = entries.filter(e => e.id !== entryId);
-    await AsyncStorage.setItem(WEIGHT_KEY, JSON.stringify(filtered));
+    await safeWriteArray(WEIGHT_KEY, filtered);
     return true;
   } catch (e) {
     return false;
@@ -116,8 +112,10 @@ export async function migrateLegacyWeightLog() {
     }
 
     entries.sort((a, b) => new Date(a.date) - new Date(b.date));
-    await AsyncStorage.setItem(WEIGHT_KEY, JSON.stringify(entries));
-    await AsyncStorage.removeItem(LEGACY_WEIGHT_KEY); // drained — won't merge twice
+    const wrote = await safeWriteArray(WEIGHT_KEY, entries);
+    // Only drain the legacy key once the merged set is safely persisted, so a
+    // write-guard (poisoned canonical) can't lose the legacy data too.
+    if (wrote) await AsyncStorage.removeItem(LEGACY_WEIGHT_KEY);
     return added > 0;
   } catch (e) {
     console.warn('[BodyWeight] Legacy migration failed:', e);

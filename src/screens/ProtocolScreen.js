@@ -27,7 +27,7 @@ import {
   COMPOUND_TYPES, DOSE_UNITS, INJECTION_SITES, STACK_SLOTS,
   getDailyProtocolStatus, getCompounds, getDoseEntries,
   saveCompound, updateCompound, deleteCompound,
-  logDose, confirmDose, deleteDose,
+  logDose, deleteDose,
   toggleStackTaken, dayKey,
   hasAcknowledgedProtocolDisclaimer, acknowledgeProtocolDisclaimer,
 } from '../services/protocol';
@@ -112,6 +112,11 @@ export default function ProtocolScreen({ navigation }) {
     const compound = compounds.find(c => c.id === selectedCompoundId) || null;
     haptics.success();
     setSaving(true);
+    // Single atomic write. The user typed AND confirmed the dose in one action,
+    // so log it directly as 'manual' (a counted state). The old two-step
+    // logDose -> confirmDose could fail between the two writes and strand the
+    // dose as 'pending', so "dose due today" would keep firing after an actual
+    // injection — a double-dose prompt risk on real medication.
     const entry = await logDose({
       compoundId: selectedCompoundId,
       name: compound ? compound.name : '',
@@ -119,8 +124,8 @@ export default function ProtocolScreen({ navigation }) {
       unit: doseUnit,
       route: compound ? compound.route : 'other',
       site: doseSite,
+      editState: 'manual',
     });
-    if (entry) await confirmDose(entry.id);   // user typed + confirmed in one action
     // Analytics must NOT carry health data. Send only a coarse category +
     // booleans — never the compound name, dose amount, unit, or route.
     capture('protocol_dose_logged', {
