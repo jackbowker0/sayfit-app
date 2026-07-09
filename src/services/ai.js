@@ -18,6 +18,7 @@ import { getNutritionStats } from './nutrition';
 import { getWeightStats } from './bodyWeight';
 import { getPRs } from './exerciseLog';
 import { getProtocolStats, hasAcknowledgedProtocolDisclaimer } from './protocol';
+import { estimateTDEE } from './energy';
 
 const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
 
@@ -341,12 +342,13 @@ export async function getCoachGreeting(coachId) {
 async function buildCoachDataSnapshot(memory, profile) {
   const units = profile?.units || 'lbs';
   const targets = await getMacroTargets().catch(() => ({}));
-  const [nStats, wStats, prs, pStats, pAck] = await Promise.all([
+  const [nStats, wStats, prs, pStats, pAck, tdee] = await Promise.all([
     getNutritionStats(targets).catch(() => null),
     getWeightStats().catch(() => null),
     getPRs().catch(() => ({})),
     getProtocolStats().catch(() => null),
     hasAcknowledgedProtocolDisclaimer().catch(() => false),
+    estimateTDEE().catch(() => null),
   ]);
 
   const lines = [];
@@ -389,6 +391,9 @@ async function buildCoachDataSnapshot(memory, profile) {
     if (wStats.monthChange != null) s += `, ${wStats.monthChange >= 0 ? '+' : ''}${round1(wStats.monthChange)} this month`;
     lines.push(s + '.');
   }
+
+  // Adaptive maintenance estimate (back-calculated from their own data).
+  if (tdee) lines.push(`Estimated maintenance: ~${tdee.tdee} kcal/day (from ${tdee.loggedDays} logged days${tdee.confidence === 'low' ? ', rough' : ''}).`);
 
   // Protocol adherence — FACTS ONLY, and only once the disclaimer is acknowledged.
   if (pAck && pStats) {

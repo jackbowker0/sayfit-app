@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode,
+  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode, TrendingUp,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -23,6 +23,7 @@ import { COACHES } from '../constants/coaches';
 import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getMacroTargets, saveMacroTargets, getUserProfile } from '../services/userProfile';
+import { estimateTDEE, targetsFromCalories } from '../services/energy';
 import { getDailyTotals, logMeal, deleteMeal, MEAL_TYPES } from '../services/nutrition';
 import { addRecentFood } from '../services/foodDb';
 import * as haptics from '../services/haptics';
@@ -64,6 +65,17 @@ export default function NutritionScreen({ navigation }) {
   const [dailyData, setDailyData] = useState(null);
   const [targets, setTargets] = useState({ kcal: null, protein: null, carbs: null, fat: null });
   const [energyLabel, setEnergyLabel] = useState('kcal'); // 'kcal' | 'cal' — display only
+  const [tdeeEst, setTdeeEst] = useState(null); // adaptive maintenance estimate or null
+
+  // Set the calorie target from the estimate (maintenance, or a -500 cut).
+  const applyTdeeTarget = async (kcal) => {
+    haptics.success();
+    const t = targetsFromCalories(kcal);
+    await saveMacroTargets(t);
+    setTargets(t);
+    setSetTargetMode(false);
+    await loadData();
+  };
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -112,10 +124,13 @@ export default function NutritionScreen({ navigation }) {
 
   const loadData = async () => {
     setLoading(true);
-    const [daily, tgts, prof] = await Promise.all([getDailyTotals(), getMacroTargets(), getUserProfile()]);
+    const [daily, tgts, prof, tdee] = await Promise.all([
+      getDailyTotals(), getMacroTargets(), getUserProfile(), estimateTDEE().catch(() => null),
+    ]);
     setDailyData(daily);
     setTargets(tgts);
     setEnergyLabel(prof.energyLabel || 'kcal');
+    setTdeeEst(tdee);
     setLoading(false);
   };
 
@@ -392,6 +407,37 @@ export default function NutritionScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </GlassCard>
+        )}
+
+        {/* ---- Adaptive maintenance estimate ---- */}
+        {tdeeEst && (
+          <FadeInView delay={110}>
+            <GlassCard accentColor={coach.color}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <TrendingUp size={16} color={coach.color} strokeWidth={2.4} />
+                <Text style={{ ...FONT.subhead, color: colors.textPrimary }}>Adaptive maintenance</Text>
+              </View>
+              <Text style={{ ...FONT.stat, color: coach.color }}>
+                ~{tdeeEst.tdee} <Text style={{ ...FONT.label, color: colors.textMuted }}>{energyLabel}/day</Text>
+              </Text>
+              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4 }}>
+                From {tdeeEst.loggedDays} logged days · weight {tdeeEst.weightChange >= 0 ? '+' : ''}{tdeeEst.weightChange} {tdeeEst.units} over {tdeeEst.windowDays}d
+                {tdeeEst.confidence === 'low' ? ' · rough — keep logging' : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity onPress={() => applyTdeeTarget(tdeeEst.tdee)} activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel="Set maintenance calorie target"
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: coach.color }}>
+                  <Text style={{ ...FONT.caption, fontWeight: '700', color: getTextOnColor(coach.color) }}>Maintain</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => applyTdeeTarget(Math.max(1000, tdeeEst.tdee - 500))} activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel="Set cut calorie target, 500 below maintenance"
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14' }}>
+                  <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Cut −500</Text>
+                </TouchableOpacity>
+              </View>
+            </GlassCard>
+          </FadeInView>
         )}
 
         {/* ---- Add meal form ---- */}
