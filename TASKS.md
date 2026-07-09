@@ -154,3 +154,65 @@ Periodic **mobility screen** (10-part assessment, à la GOWOD) → a mobility sc
 - BRIEF dashboard lists body **measurements** + cardio/active-energy; measurements has no task yet, and cardio is Apple-gated. Don't run the daily-use kill test against an intentionally incomplete dashboard.
 - Base workout/exercise tables are ALTERed but never CREATEd in committed SQL — a clean DB reset would fail. Fix if/when nutrition goes cloud-synced (T6+).
 - Privacy manifest (`app.json` → `ios.privacyManifests`): keys were fixed for prebuild (`NSPrivacyDataType*` → `NSPrivacyCollectedDataType*`). Two ship-time cleanups before App Store submission: (1) `NSPrivacyCollectedDataTypeHealthAndFitness` isn't a real Apple constant — split into `…Health`/`…Fitness` AND only declare it once HealthKit (T11) actually collects it; (2) DeviceID/UserID collected for PostHog analytics should arguably use the `…PurposeAnalytics` purpose, not only `…AppFunctionality`. The pre-ship-security/ship gate should audit this.
+
+---
+
+# ═══ RED PILL BACKLOG — 2026-07-08 ═══
+
+Derived from the full competitive pass (11 research briefs, ~60 sources), a 3-dimension code review (data-integrity + backend/security + crash-paths), and a code inventory. Full write-up: the "SayFit — Red Pill Report" artifact. Jack's decision: **"get everything mentioned in the works."** These are RP-numbered to sit alongside T1–T23; the market rationale for each lives in the report. Sequencing rule unchanged: protect the daily log path, ship data-safety before features.
+
+## Model/effort (Jack's rule)
+Fable/Opus **medium** → all RP-P0 data-integrity + RP-SEC (medical-log + auth/money). Sonnet **low–med** → RP food-DB UI, modularity onboarding, Coach UI. Reserve a `/code-review high` before RP-SEC and the food-DB tier ship.
+
+## RP-P0 — Data-safety cluster (verified bugs; DONE 2026-07-08, commit `5d3e11b`)
+- [x] **Weight split-brain** — WeightScreen wrote `sayfit_weight_log`; service/dashboard read `sayfit_body_weight`. Unified on the service + one-time `migrateLegacyWeightLog()` (never overwrites canonical). 
+- [x] **WeightScreen one-tap wipe** — persisted from possibly-empty React state after a failed load. Now writes through the service + reads back.
+- [x] **UTC day keys** — `nutrition.js` + `bodyWeight.js` used UTC (evening entries tagged tomorrow / overwrote prior day). Now local, matching `protocol.js`. Behaviorally verified (9:30pm ET stays same day).
+- [x] **Health data → analytics** — dropped compound name/amount/unit/route from `protocol_dose_logged`, macro values from `meal_logged`; **session replay OFF** (was capturing dose/site/macros on-screen).
+- [x] **Notification/deep-link crash** — PostDetail expected `post`, push sends `postId`. Guarded both entry points.
+- [x] **Coach identity reset** — `coachId` never rehydrated from profile; Settings Save then clobbered the real pick. Rehydrate on launch (WorkoutContext).
+- [x] **Open `workout-gen` edge fn** — no config block (no JWT). Added `verify_jwt=true`. ⚠ needs `supabase functions deploy workout-gen` to take effect.
+- [x] **No backup** — added Settings → **Export My Data** (JSON of every `sayfit_*` key to the share sheet). New `src/services/dataExport.js`.
+
+## RP-P1 — Data-integrity, next tier (before anyone else uses it)
+- [ ] **Corrupt-parse → erase pattern (ALL services).** A bad JSON read returns `[]`, and the next write persists the empty array — the medication log self-destructs on first write after corruption. Add a shared safe-read that QUARANTINES a bad blob (copy to `<key>_corrupt_<ts>`) instead of silently returning `[]`, and refuse to overwrite a key whose last read failed. files: new `src/services/safeStore.js`, adopt in protocol/nutrition/bodyWeight/exerciseLog/storage/exerciseNotes/achievements.
+- [ ] **Atomic dose logging.** `logDose` then `confirmDose` are two writes; a failure between leaves the dose `pending` → "dose due today" still fires after injecting (double-dose prompt). Make it a single write with `editState:'manual'`. files: `protocol.js`, `ProtocolScreen.js`.
+- [ ] **Read-modify-write races.** (a) rapid supplement check-offs clobber each other (`toggleStackTaken`); (b) double-tap Save Workout duplicates the session (guard starts after an `await`). Add a per-key write queue or in-flight guard. files: `protocol.js`, `LogWorkoutScreen.js:674-695`.
+- [ ] **Edit/delete for logged lifts.** A voice mis-parse ("725") permanently poisons PRs with no correction path; wire an entry editor + call the existing `recomputePRs`. (Also the durable fix for the "1:85" class.) files: `exerciseLog.js`, `LogWorkoutScreen.js`.
+- [ ] **Unit-switch safety.** lbs→kg relabels history without converting; the service-level PR ceiling compares kg against a lbs constant (`exerciseLog.js:194`). Convert on switch (or store canonical + display-convert); make the ceiling unit-aware.
+- [ ] **Ship Protocol empty.** Don't seed Test Cyp 200mg/wk + a 66mg pre-fill into every install (App-Store optics + blurs "doses always user-entered"). Keep Jack's protocol as an import/restore, not a default seed. files: `protocol.js:83-117`, gate behind a dev/personal flag.
+- [ ] **Streak math** — `storage.js:111` breaks across DST; `CalendarScreen` computes a different (UTC) streak than the dashboard. Unify on the local day-key helper.
+
+## RP-SEC — Backend / security (before ANY external user)
+- [ ] **Rate-limit + real auth on AI edge fns.** Anon key ships in the bundle and is not an auth boundary; no per-user throttle or input-length cap on `coach`/`workout-gen` → anyone can loop them and drain the Anthropic budget. Require an end-user JWT (not anon), derive `user_id`, add a per-user counter + max prompt length. (config parity already done in RP-P0.)
+- [ ] **Prompt-injection hardening.** Move prompt assembly server-side; pass user text (name, raw workout request) as clearly-delimited untrusted data; validate `workout-gen` JSON defensively.
+- [ ] **Secure service-role fns.** `push-notification` + `refresh-leaderboard` run service-role with `verify_jwt=false` and no caller secret, and echo raw `error.message`. Add a webhook/cron shared secret; stop leaking internals. (Moot while parked, fix before social returns.)
+
+## RP-COMMUNITY — Park it (recommended)
+- [ ] **Feature-flag the social entry points OFF.** The Home-header Users icon + any nav into SocialFeed/Challenges/Leaderboard/PostDetail/UserProfile. Leave the code + the `feed_posts`/`challenges`/etc. tables dead (all 404 today anyway). Keep the share-card generator (the viral artifact works without a feed). Revisit only as **friends-only accountability** when real humans use the app (public feeds don't retain; small-circle does). files: `App.js` (drop the Users icon), a `FEATURES.social` flag.
+- [ ] (Deferred) If/when social returns: recreate base `workouts`/`exercises`/`food_logs` migrations (schema unrecoverable from repo — hand-made in the old dashboard) + the `push-notification` DB webhook (never versioned).
+
+## RP-COACH — Rebuild as a data-grounded narrator
+- [ ] **Kill the mocked pattern.** Remove "Motivate me"/generic-motivation pills (the exact interaction reviewers mock — Apple Workout Buddy, Strava AI). 
+- [ ] **Build the "specific · falsifiable · new" coach.** Coach reads lifts + macros + weight trend + protocol adherence (+ later labs) and every reply CITES the numbers ("volume down 18% vs last week, so I moved leg day") — this attacks the one weakness Fitbod/Juggernaut never solved (repetitive, can't-explain, ignores-corrections). Must take corrections. Route anything medical-adjacent to "flag for your doctor," never confident advice (WHOOP-Coach failure mode). files: `ai.js`, `coach` edge fn (real reasoning w/ the fused context), `CoachScreen.js`.
+- [ ] **Explainable workout gen.** When it generates a plan, anchor to recognizable templates (PPL, 5/3/1) with transparent progression rules, not a black box; surface AI-vs-local-fallback honestly in the UI.
+
+## RP-FUEL — The MFP-replacement gap (largest feature debt; see also T5/T6/T12)
+- [ ] **Food database + free barcode scan.** Open Food Facts + USDA FoodData Central (both free/CC0) as the base layer, SQLite cache, barcode via the camera. **Barcode is table stakes and must stay free forever** (MFP's 2022 paywall is the category's defining own-goal). files: new `src/services/foodDb.js`, barcode screen, cache.
+- [ ] **Voice food logging.** Reuse the lift-parse pattern ("I ate 3 eggs and toast") → DB match → structured log. Route the QuickAddMic to Fuel too (today it only hits workout logging). Fail gracefully to search/manual.
+- [ ] **Adaptive TDEE (the MacroFactor magic, cheap version).** Weekly intake-trend vs weight-trend → auto-adjust the macro target. ~80% of the value of MacroFactor's model; nobody else bothers. files: `nutrition.js`, `userProfile.getMacroTargets`.
+- [ ] **Fast-log floor.** Whatever else, keep every log ≤2-3 taps (previous entry ghosted in). Friction — not feature count — is what kills all-in-one apps.
+
+## RP-MODULARITY — Pick-your-pillars (recommended: actually remove tabs)
+- [ ] **Onboarding "What do you want to track?"** — Lifts / Food / Protocol (multi-select); Home + Coach always present. Unchosen pillars get **no tab** (a lifts-only user sees Home · Train · Coach). Disabled pillars live as a one-tap "Add tracking" row on Home/Settings — never deleted, no re-onboarding. Inside pillars, Samsung-style card show/hide. (Buildable + low-risk with 5 tabs; industry norm is fixed tabs + hidden cards, but our shape supports the stronger version.) files: `App.js` (conditional tab registration), onboarding, a `pillars` profile field + `FEATURES`.
+
+## RP-EXERCISE-CONTENT — Media = table stakes, not a differentiator
+- [ ] **License, don't film, don't skip.** 86 exercises already have text steps/tips/breathing (good). When media is wanted: a white-label video library (~$19/mo, e.g. Your Move) or MuscleWiki API (7,500+ clips) — NEVER film, never AI-generate imagery (a loyal Alpha Progression user: AI images "souring me on the whole experience"). Spend effort on **database breadth + free custom exercises** (missing exercises draw complaints even in 5-star reviews). files: `exercises.js` (media field), `ExerciseGuide.js`.
+
+## RP-MONETIZATION — Rules to lock before pricing (from the graveyard)
+- Never paywall barcode scanning. · Never move the paywall line back (Strong's lifetime removal → the Hevy exodus). · Free CSV export from day one + **import Strong/Hevy CSV** (switcher funnel; RP already ships JSON export — add CSV). · Never hold data hostage on lapse (Juggernaut's most-resented policy). · No ads/upsell nag in the log path (Cronometer/Lose It paywall analytics instead). · No AI-slop imagery anywhere.
+
+## RP cleanup (mechanical)
+- [ ] Delete dead code: orphaned `src/screens/workoutGenerator.js` (440 LOC, unused dup) + `src/screens/HomeScreen.js`.
+- [ ] `ProfileBadges` reads `earned_badges` (not a real column) — wire to local `achievements.js` or drop.
+- [ ] Reconcile `supabase/.temp/project-ref` (old `dwsvhrxjyfbdkbjcygel`) with the live `.env` project (`xqlpojfuptmrwyfadpnz`) so deploys land in the right place.
