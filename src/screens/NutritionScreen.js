@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, Flame, Beef, Apple, Trash2,
+  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -24,9 +24,11 @@ import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme'
 import { useTheme } from '../hooks/useTheme';
 import { getMacroTargets, saveMacroTargets } from '../services/userProfile';
 import { getDailyTotals, logMeal, deleteMeal, MEAL_TYPES } from '../services/nutrition';
+import { addRecentFood } from '../services/foodDb';
 import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
 import GlassCard from '../components/GlassCard';
+import FoodSearchModal from '../components/FoodSearchModal';
 
 // Capitalise first letter
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -71,6 +73,21 @@ export default function NutritionScreen({ navigation }) {
   const [carbsInput, setCarbsInput] = useState('');
   const [fatInput, setFatInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [foodSearchVisible, setFoodSearchVisible] = useState(false);
+  const [foodSource, setFoodSource] = useState('manual'); // 'manual' | 'search'
+
+  // A food picked from search pre-fills the macro form; the user still reviews
+  // and taps Log, so nothing is auto-logged.
+  const handleFoodPick = (food, grams, macros) => {
+    setDescription(food.brand ? `${food.name} (${food.brand})` : food.name);
+    setKcalInput(String(macros.kcal));
+    setProteinInput(String(macros.protein));
+    setCarbsInput(String(macros.carbs));
+    setFatInput(String(macros.fat));
+    setFoodSource('search');
+    addRecentFood(food).catch(() => {});
+    setFoodSearchVisible(false);
+  };
 
   // ---- Set-targets form (only visible when targets unset) ----
   const [setTargetMode, setSetTargetMode] = useState(false);
@@ -124,15 +141,15 @@ export default function NutritionScreen({ navigation }) {
     setSaving(true);
     const items = description.trim() ? [{ name: description.trim(), qty: 1 }] : [];
     await logMeal({
-      source: 'manual',
+      source: foodSource,
       mealType,
       items,
       macros: { kcal, protein, carbs, fat },
     });
     // Analytics must NOT carry the actual macro values (dietary health data).
-    // Keep only the meal type + whether a description was added.
+    // Keep only the meal type, entry source, and whether a description was added.
     capture('meal_logged', {
-      source: 'manual',
+      source: foodSource,
       mealType,
       hasDescription: items.length > 0,
     });
@@ -142,6 +159,7 @@ export default function NutritionScreen({ navigation }) {
     setProteinInput('');
     setCarbsInput('');
     setFatInput('');
+    setFoodSource('manual');
     await loadData();
     setSaving(false);
   };
@@ -391,6 +409,22 @@ export default function NutritionScreen({ navigation }) {
             ))}
           </View>
 
+          {/* Food search — the primary path; manual macro entry stays below as fallback */}
+          <TouchableOpacity
+            onPress={() => { haptics.tap(); setFoodSearchVisible(true); }}
+            activeOpacity={0.8}
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              paddingVertical: 12, marginBottom: 12, borderRadius: RADIUS.md,
+              borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Search the food database"
+          >
+            <Search size={16} color={coach.color} strokeWidth={2.4} />
+            <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Search food database</Text>
+          </TouchableOpacity>
+
           {/* Description (optional) */}
           <TextInput
             style={[inputStyle(colors), { marginBottom: 10 }]}
@@ -543,6 +577,14 @@ export default function NutritionScreen({ navigation }) {
         )}
 
       </ScrollView>
+
+      <FoodSearchModal
+        visible={foodSearchVisible}
+        onClose={() => setFoodSearchVisible(false)}
+        onPick={handleFoodPick}
+        coachColor={coach.color}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 }
