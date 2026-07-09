@@ -19,6 +19,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // refused until a clean read succeeds, so we never clobber unrecoverable data.
 const poisoned = new Set();
 
+// Per-key promise chains, so concurrent read-modify-write operations on the same
+// key run one at a time instead of interleaving and clobbering each other.
+const chains = new Map();
+
+/**
+ * Serialize an async read-modify-write against a key: `fn` runs only after any
+ * prior serialized op on that key settles. Returns fn's result.
+ */
+export function serialize(key, fn) {
+  const prev = chains.get(key) || Promise.resolve();
+  const next = prev.then(fn, fn); // run fn regardless of the prior op's outcome
+  chains.set(key, next.then(() => {}, () => {})); // keep the chain alive past errors
+  return next;
+}
+
 async function quarantine(key, raw) {
   try {
     await AsyncStorage.setItem(`${key}__corrupt__${Date.now()}`, raw);

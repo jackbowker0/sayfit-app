@@ -12,7 +12,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { safeReadArray, safeWriteArray } from './safeStore';
+import { safeReadArray, safeWriteArray, serialize } from './safeStore';
 import { SEED_PERSONAL_PROTOCOL } from '../config/features';
 
 // ---- KEYS ----
@@ -376,19 +376,25 @@ export async function getStackLog() {
 // a deterministic composite id + filter-ALL-on-uncheck means duplicate entries
 // (e.g. from a fast double-tap race) can never leave an item stuck "taken".
 export async function toggleStackTaken(itemId, date = null) {
-  try {
-    const log = await getStackLog();
-    const key = dayKey(date);
-    const present = log.some(l => l.itemId === itemId && dayKey(l.date) === key);
-    const next = present
-      ? log.filter(l => !(l.itemId === itemId && dayKey(l.date) === key)) // un-check: remove all matching
-      : [...log, { id: `${itemId}|${key}`, itemId, date: date || new Date().toISOString() }];
-    await safeWriteArray(PROTOCOL_STACK_LOG_KEY, next);
-    return !present;                 // true = now taken, false = now un-taken
-  } catch (e) {
-    console.warn('[Protocol] Failed to toggle stack item:', e);
-    return null;
-  }
+  // Serialize on the log key: rapid check-offs of DIFFERENT items each do a
+  // read-modify-write of the whole array, so interleaving would drop one item's
+  // change. Running them one at a time (per key) prevents the lost update; the
+  // idempotent composite-id design still covers same-item double-taps.
+  return serialize(PROTOCOL_STACK_LOG_KEY, async () => {
+    try {
+      const log = await getStackLog();
+      const key = dayKey(date);
+      const present = log.some(l => l.itemId === itemId && dayKey(l.date) === key);
+      const next = present
+        ? log.filter(l => !(l.itemId === itemId && dayKey(l.date) === key)) // un-check: remove all matching
+        : [...log, { id: `${itemId}|${key}`, itemId, date: date || new Date().toISOString() }];
+      await safeWriteArray(PROTOCOL_STACK_LOG_KEY, next);
+      return !present;                 // true = now taken, false = now un-taken
+    } catch (e) {
+      console.warn('[Protocol] Failed to toggle stack item:', e);
+      return null;
+    }
+  });
 }
 
 export async function clearStackLog() {

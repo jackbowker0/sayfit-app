@@ -671,6 +671,10 @@ export default function LogWorkoutScreen({ navigation }) {
 
   // ─── SAVE WITH COACH PR CELEBRATION ───────────────────────────
 
+  // Synchronous in-flight guard (a ref, not state) so a rapid double-tap can't
+  // run the save twice before React re-renders the disabled button.
+  const savingRef = useRef(false);
+
   const handleSave = async () => {
     if (exercises.length === 0) { Alert.alert('Nothing to save', 'Add at least one exercise first.'); return; }
     // Data-integrity gate: confirm implausible weights before they write a permanent PR.
@@ -690,6 +694,8 @@ export default function LogWorkoutScreen({ navigation }) {
   };
 
   const proceedSave = async () => {
+    if (savingRef.current) return;   // block the double-tap before it duplicates the session
+    savingRef.current = true;
     setSaving(true);
     const source = mode === 'voice' ? 'voice' : (mode === 'text' ? 'text' : 'manual');
     const { entry, newPRs } = await saveExerciseSession({ exercises, source });
@@ -716,6 +722,7 @@ export default function LogWorkoutScreen({ navigation }) {
       source: 'log',
     });
 
+    savingRef.current = false;   // writes are done — safe to re-enable
     setSaving(false);
     scheduleWorkoutReminders().catch(() => {}); // reset inactivity nudge timer
 
