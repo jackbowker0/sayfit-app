@@ -698,7 +698,7 @@ export default function LogWorkoutScreen({ navigation }) {
     savingRef.current = true;
     setSaving(true);
     const source = mode === 'voice' ? 'voice' : (mode === 'text' ? 'text' : 'manual');
-    const { entry, newPRs } = await saveExerciseSession({ exercises, source });
+    const { entry, newPRs } = await saveExerciseSession({ exercises, source, units });
 
     // ─── POSTHOG: workout logged ───
     const _totalSetsLogged = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);

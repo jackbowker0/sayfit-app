@@ -8,6 +8,7 @@
 // ============================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeReadArray, safeWriteArray } from './safeStore';
 
 const LOG_KEY = 'sayfit_exercise_log';
 const PR_KEY = 'sayfit_prs';
@@ -57,13 +58,8 @@ const COMPOUND_EXERCISES = [
 // ---- READ / WRITE ----
 
 export async function getExerciseLog() {
-  try {
-    const raw = await AsyncStorage.getItem(LOG_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('[ExerciseLog] Failed to load:', e);
-    return [];
-  }
+  // Quarantines a corrupt blob instead of returning [] into the next write.
+  return safeReadArray(LOG_KEY);
 }
 
 export async function getPRs() {
@@ -87,9 +83,12 @@ export async function saveExerciseSession(session) {
       exercises: session.exercises || [],
       notes: session.notes || '',
       source: session.source || 'manual',
+      // Stamp the unit the weights were entered in, so PR ceilings + any future
+      // conversion know what these numbers mean.
+      units: session.units === 'kg' ? 'kg' : 'lbs',
     };
     log.push(entry);
-    await AsyncStorage.setItem(LOG_KEY, JSON.stringify(log));
+    await safeWriteArray(LOG_KEY, log);
 
     // Check for new PRs
     const newPRs = await checkAndUpdatePRs(entry);
@@ -190,8 +189,9 @@ async function checkAndUpdatePRs(session) {
 
     // Data-integrity backstop: never let an implausible weight write a permanent
     // PR. The UI outlier gate (checkWeightOutliers) is the primary guard; this
-    // catches anything that slips past it. Skips both weight AND volume for this lift.
-    if (maxWeight > SANE_WEIGHT_CEILING_LBS) continue;
+    // catches anything that slips past it. Skips both weight AND volume for this
+    // lift. Unit-aware so a kg user's fat-finger isn't measured against a lbs ceiling.
+    if (maxWeight > ceilingForUnit(session.units || 'lbs')) continue;
 
     if (!prs[name]) {
       prs[name] = { maxWeight: 0, maxVolume: 0, maxReps: 0 };
@@ -235,7 +235,7 @@ export async function recomputePRs() {
     for (const exercise of entry.exercises || []) {
       const sets = exercise.sets || [];
       const maxWeight = Math.max(0, ...sets.map(s => s.weight || 0));
-      if (maxWeight > SANE_WEIGHT_CEILING_LBS) continue;
+      if (maxWeight > ceilingForUnit(entry.units || 'lbs')) continue;
       const name = normalizeExerciseName(exercise.name);
       const maxVolume = Math.max(0, ...sets.map(s => (s.weight || 0) * (s.reps || 0)));
       const maxReps = Math.max(0, ...sets.map(s => s.reps || 0));
