@@ -149,6 +149,29 @@ export function macrosForPortion(food, grams) {
 
 // ---- SEARCH ----
 
+// Qualifier words that usually mean "not the plain food I searched for". A
+// branded entry literally named "Egg" is often dried/powdered junk data with a
+// wildly wrong per-100g value — this + the generic boost keep those out of the
+// default slot (they inflate calories 3-4x, the source of bogus totals).
+const VARIANT = /(white|substitute|powder|dried|dehydrated|imitation|infant|baby food|concentrate|drink mix|non-?dairy|meatless)/i;
+
+function scoreMatch(nameLower, query, generic) {
+  const q = (query || '').toLowerCase().trim();
+  const words = q.split(/\s+/).filter(Boolean);
+  // Generic (USDA Foundation/SR Legacy) has accurate, standardized per-100g
+  // data; branded is crowd-sourced and unreliable for generic terms. So generic
+  // dominates whenever it exists (brand-name searches have no generic match, so
+  // branded still surfaces there).
+  let s = generic ? 10 : 0;
+  if (nameLower === q || nameLower.startsWith(q + ',') || nameLower.startsWith(q + ' ')) s += 4;
+  else if (words[0] && nameLower.startsWith(words[0])) s += 2;
+  if (words.length && words.every((w) => nameLower.includes(w))) s += 1;
+  s -= nameLower.length / 40;                                   // concise beats qualifier-laden
+  if (VARIANT.test(nameLower) && !VARIANT.test(q)) s -= 3;      // don't default to a variant
+  if (/\b(whole|raw)\b/.test(nameLower)) s += 0.6;             // prefer the plain base form
+  return s;
+}
+
 async function searchUSDA(query, limit) {
   const data = await usdaFetch(
     `/foods/search?query=${encodeURIComponent(query)}&pageSize=${limit}`
@@ -156,10 +179,10 @@ async function searchUSDA(query, limit) {
   );
   if (!data) return null; // null = source unavailable (distinct from "no matches")
   const foods = (data.foods || []).map(normalizeUSDA).filter(Boolean);
-  // Stable sort: generic first, preserve API relevance within each group.
+  // Rank by match score so the accurate, plain, generic food is the default.
   return foods
-    .map((f, i) => ({ f, i }))
-    .sort((a, b) => (Number(b.f._generic) - Number(a.f._generic)) || (a.i - b.i))
+    .map((f, i) => ({ f, i, score: scoreMatch(f.name.toLowerCase(), query, f._generic) }))
+    .sort((a, b) => (b.score - a.score) || (a.i - b.i))
     .map(({ f }) => { const { _generic, ...rest } = f; return rest; });
 }
 
