@@ -190,8 +190,8 @@ Fable/Opus **medium** → all RP-P0 data-integrity + RP-SEC (medical-log + auth/
 - [ ] **Prompt-injection hardening.** Move prompt assembly server-side; pass user text (name, raw workout request) as clearly-delimited untrusted data; validate `workout-gen` JSON defensively.
 - [ ] **Secure service-role fns.** `push-notification` + `refresh-leaderboard` run service-role with `verify_jwt=false` and no caller secret, and echo raw `error.message`. Add a webhook/cron shared secret; stop leaking internals. (Moot while parked, fix before social returns.)
 
-## RP-COMMUNITY — Park it (recommended)
-- [ ] **Feature-flag the social entry points OFF.** The Home-header Users icon + any nav into SocialFeed/Challenges/Leaderboard/PostDetail/UserProfile. Leave the code + the `feed_posts`/`challenges`/etc. tables dead (all 404 today anyway). Keep the share-card generator (the viral artifact works without a feed). Revisit only as **friends-only accountability** when real humans use the app (public feeds don't retain; small-circle does). files: `App.js` (drop the Users icon), a `FEATURES.social` flag.
+## RP-COMMUNITY — Park it (DONE `bdd4a59`)
+- [x] **Social entry points gated OFF** behind `SOCIAL_ENABLED=false` (config/features): the Home social icon + AccountabilityWidget on DashboardScreen. All screens/code intact; everything downstream is unreachable once the entry points are gone. Revisit as friends-only accountability once there are real users (recreate the schema first). Share-card generator untouched (works without a feed).
 - [ ] (Deferred) If/when social returns: recreate base `workouts`/`exercises`/`food_logs` migrations (schema unrecoverable from repo — hand-made in the old dashboard) + the `push-notification` DB webhook (never versioned).
 
 ## RP-COACH — Rebuild as a data-grounded narrator
@@ -200,10 +200,12 @@ Fable/Opus **medium** → all RP-P0 data-integrity + RP-SEC (medical-log + auth/
 - [ ] **Explainable workout gen.** When it generates a plan, anchor to recognizable templates (PPL, 5/3/1) with transparent progression rules, not a black box; surface AI-vs-local-fallback honestly in the UI.
 
 ## RP-FUEL — The MFP-replacement gap (largest feature debt; see also T5/T6/T12)
-- [ ] **Food database + free barcode scan.** Open Food Facts + USDA FoodData Central (both free/CC0) as the base layer, SQLite cache, barcode via the camera. **Barcode is table stakes and must stay free forever** (MFP's 2022 paywall is the category's defining own-goal). files: new `src/services/foodDb.js`, barcode screen, cache.
-- [ ] **Voice food logging.** Reuse the lift-parse pattern ("I ate 3 eggs and toast") → DB match → structured log. Route the QuickAddMic to Fuel too (today it only hits workout logging). Fail gracefully to search/manual.
-- [ ] **Adaptive TDEE (the MacroFactor magic, cheap version).** Weekly intake-trend vs weight-trend → auto-adjust the macro target. ~80% of the value of MacroFactor's model; nobody else bothers. files: `nutrition.js`, `userProfile.getMacroTargets`.
-- [ ] **Fast-log floor.** Whatever else, keep every log ≤2-3 taps (previous entry ghosted in). Friction — not feature count — is what kills all-in-one apps.
+- [x] **Food database + text search** (`fadf0c8`+`669fb8c`) — new `src/services/foodDb.js` (Open Food Facts search + barcode lookup, normalized per-100g macros, portion math, barcode cache, recents) + `FoodSearchModal` wired into the Fuel add-meal form (search → portion w/ live preview → pre-fills the log). Live-verified against the real API. ODbL attribution shown. Fuel is now a real tracker, not a calculator.
+- [ ] **Barcode scan UI.** `foodDb.lookupBarcode()` already works; needs a camera scanner screen. **Requires `expo-camera` (native dep) + a dev-client rebuild** — Jack's action. Wire the scan result → the same portion/pre-fill path as search. Keep free forever (MFP's 2022 paywall is the category's defining own-goal).
+- [ ] **USDA fallback.** Add USDA FoodData Central (public domain) behind a free `EXPO_PUBLIC_USDA_KEY` as a second source when OFF misses (esp. US whole foods).
+- [ ] **Voice food logging.** Reuse the lift-parse pattern ("I ate 3 eggs and toast") → `foodDb.searchFoods` match → structured log. Route QuickAddMic to Fuel too (today it only hits workout logging). Fail gracefully to search/manual.
+- [ ] **Adaptive TDEE (the MacroFactor magic, cheap version).** Weekly intake-trend vs weight-trend → auto-adjust the macro target. ~80% of the value of MacroFactor's model; nobody else bothers. files: `nutrition.js`, `userProfile.getMacroTargets`. (= T15.)
+- [ ] **Fast-log floor.** Keep every log ≤2-3 taps (recents already give one-tap re-log; ghost the previous entry). Friction — not feature count — is what kills all-in-one apps.
 
 ## RP-MODULARITY — Pick-your-pillars (recommended: actually remove tabs)
 - [ ] **Onboarding "What do you want to track?"** — Lifts / Food / Protocol (multi-select); Home + Coach always present. Unchosen pillars get **no tab** (a lifts-only user sees Home · Train · Coach). Disabled pillars live as a one-tap "Add tracking" row on Home/Settings — never deleted, no re-onboarding. Inside pillars, Samsung-style card show/hide. (Buildable + low-risk with 5 tabs; industry norm is fixed tabs + hidden cards, but our shape supports the stronger version.) files: `App.js` (conditional tab registration), onboarding, a `pillars` profile field + `FEATURES`.
