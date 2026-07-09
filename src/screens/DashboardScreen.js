@@ -36,6 +36,7 @@ import WorkoutDetailSheet from '../components/WorkoutDetailSheet';
 import AchievementDetailSheet from '../components/AchievementDetailSheet';
 import AccountabilityWidget from '../components/AccountabilityWidget';
 import QuickAddMic from '../components/QuickAddMic';
+import { SOCIAL_ENABLED } from '../config/features';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -351,16 +352,18 @@ export default function DashboardScreen({ navigation }) {
             </View>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); navigation.navigate('SocialFeed'); }}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityRole="button"
-              accessibilityLabel="Social feed"
-              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Users size={18} color={colors.textMuted} strokeWidth={1.8} />
-            </TouchableOpacity>
+            {SOCIAL_ENABLED && (
+              <TouchableOpacity
+                onPress={() => { haptics.tap(); navigation.navigate('SocialFeed'); }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel="Social feed"
+                style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Users size={18} color={colors.textMuted} strokeWidth={1.8} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => { haptics.tap(); navigation.navigate('Settings'); }}
               activeOpacity={0.7}
@@ -493,7 +496,7 @@ export default function DashboardScreen({ navigation }) {
         <WeightCard key={weightKey} navigation={navigation} onWeightLogged={() => setWeightKey(k => k + 1)} />
         <NutritionCard navigation={navigation} />
         <ProtocolCard navigation={navigation} />
-        <AccountabilityWidget navigation={navigation} />
+        {SOCIAL_ENABLED && <AccountabilityWidget navigation={navigation} />}
 
         {/* Recent Achievements */}
         {recentBadges.length > 0 && (
