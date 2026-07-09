@@ -18,7 +18,7 @@ import { FONT, SPACING, RADIUS, getTextOnColor } from '../constants/theme';
 import { searchFoods, getRecentFoods, macrosForPortion } from '../services/foodDb';
 import * as haptics from '../services/haptics';
 
-export default function FoodSearchModal({ visible, onClose, onPick, coachColor, colors, initialFood = null }) {
+export default function FoodSearchModal({ visible, onClose, onPick, coachColor, colors, initialFood = null, energyLabel = 'kcal' }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [recents, setRecents] = useState([]);
@@ -83,7 +83,7 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
       >
         <Text style={{ ...FONT.body, color: colors.textPrimary }} numberOfLines={1}>{item.name}</Text>
         <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }} numberOfLines={1}>
-          {item.brand ? `${item.brand} · ` : ''}{per.kcal} kcal · P{per.protein} C{per.carbs} F{per.fat} /100g
+          {item.brand ? `${item.brand} · ` : ''}{per.kcal} {energyLabel} · P{per.protein} C{per.carbs} F{per.fat} /100g
         </Text>
       </TouchableOpacity>
     );
@@ -131,7 +131,7 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
             ) : null}
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 28, marginBottom: 8 }}>
-              {[['kcal', m.kcal], ['Protein', m.protein], ['Carbs', m.carbs], ['Fat', m.fat]].map(([label, val]) => (
+              {[[energyLabel, m.kcal], ['Protein', m.protein], ['Carbs', m.carbs], ['Fat', m.fat]].map(([label, val]) => (
                 <View key={label} style={{ alignItems: 'center' }}>
                   <Text style={{ ...FONT.stat, fontSize: 22, color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>{val}</Text>
                   <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{label}</Text>

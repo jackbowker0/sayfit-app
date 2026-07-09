@@ -22,7 +22,7 @@ import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
 import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
-import { getMacroTargets, saveMacroTargets } from '../services/userProfile';
+import { getMacroTargets, saveMacroTargets, getUserProfile } from '../services/userProfile';
 import { getDailyTotals, logMeal, deleteMeal, MEAL_TYPES } from '../services/nutrition';
 import { addRecentFood } from '../services/foodDb';
 import * as haptics from '../services/haptics';
@@ -63,6 +63,7 @@ export default function NutritionScreen({ navigation }) {
   // ---- Data state ----
   const [dailyData, setDailyData] = useState(null);
   const [targets, setTargets] = useState({ kcal: null, protein: null, carbs: null, fat: null });
+  const [energyLabel, setEnergyLabel] = useState('kcal'); // 'kcal' | 'cal' — display only
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -111,9 +112,10 @@ export default function NutritionScreen({ navigation }) {
 
   const loadData = async () => {
     setLoading(true);
-    const [daily, tgts] = await Promise.all([getDailyTotals(), getMacroTargets()]);
+    const [daily, tgts, prof] = await Promise.all([getDailyTotals(), getMacroTargets(), getUserProfile()]);
     setDailyData(daily);
     setTargets(tgts);
+    setEnergyLabel(prof.energyLabel || 'kcal');
     setLoading(false);
   };
 
@@ -145,7 +147,7 @@ export default function NutritionScreen({ navigation }) {
     const fat = parseFloat(fatInput) || 0;
 
     if (!kcal || kcal <= 0) {
-      Alert.alert('Missing info', 'Enter at least kcal to log a meal.');
+      Alert.alert('Missing info', `Enter at least ${energyLabel} to log a meal.`);
       return;
     }
     haptics.success();
@@ -263,10 +265,10 @@ export default function NutritionScreen({ navigation }) {
               <Text style={{ ...FONT.stat, color: coach.color }}>{totals.kcal}</Text>
               {targets.kcal ? (
                 <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-                  / {targets.kcal} KCAL
+                  / {targets.kcal} {energyLabel.toUpperCase()}
                 </Text>
               ) : (
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>KCAL</Text>
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{energyLabel.toUpperCase()}</Text>
               )}
             </GlassCard>
             <GlassCard style={{ flex: 1, alignItems: 'center', marginBottom: 0 }} accentColor={colors.blue}>
@@ -610,6 +612,7 @@ export default function NutritionScreen({ navigation }) {
         coachColor={coach.color}
         colors={colors}
         initialFood={initialFood}
+        energyLabel={energyLabel}
       />
 
       <BarcodeScannerModal

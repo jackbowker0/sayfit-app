@@ -52,6 +52,7 @@ export default function SettingsScreen({ navigation }) {
   const [equipment, setEquipment] = useState(['bodyweight']);
   const [weeklyGoal, setWeeklyGoal] = useState(4);
   const [units, setUnits] = useState('lbs');
+  const [energyLabel, setEnergyLabel] = useState('kcal');
   const [restDuration, setRestDuration] = useState(90);
   const [workoutDays, setWorkoutDays] = useState([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -94,6 +95,7 @@ export default function SettingsScreen({ navigation }) {
     setEquipment(p.equipment || ['bodyweight']);
     setWeeklyGoal(p.weeklyGoal || 4);
     setUnits(p.units || 'lbs');
+    setEnergyLabel(p.energyLabel || 'kcal');
     setRestDuration(p.restDuration || 90);
     setWorkoutDays(p.workoutDays || []);
     setNotificationsEnabled(p.notificationsEnabled ?? false);
@@ -121,7 +123,7 @@ export default function SettingsScreen({ navigation }) {
     await saveUserProfile({
       name: name.trim(), fitnessLevel, goals, equipment,
       weeklyGoal: workoutDays.length > 0 ? workoutDays.length : weeklyGoal,
-      units, restDuration, coachId, workoutDays,
+      units, energyLabel, restDuration, coachId, workoutDays,
       notificationsEnabled, reminderHour,
     });
     setHasChanges(false);
@@ -437,6 +439,18 @@ export default function SettingsScreen({ navigation }) {
                   accessibilityRole="button" accessibilityState={{ selected: units === u }}
                 >
                   <Text style={[ds.toggleText, units === u && { color: coach.color }]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[ds.fieldLabel, FONT.caption, { color: colors.textSecondary, marginTop: SPACING.lg }]}>Energy label</Text>
+            <View style={ds.toggleRow}>
+              {['kcal', 'cal'].map(e => (
+                <TouchableOpacity key={e} style={[ds.toggleBtn, energyLabel === e && { backgroundColor: coach.color + '20', borderColor: coach.color }]}
+                  onPress={() => { haptics.tick(); setEnergyLabel(e); markChanged(); }} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityState={{ selected: energyLabel === e }}
+                >
+                  <Text style={[ds.toggleText, energyLabel === e && { color: coach.color }]}>{e}</Text>
                 </TouchableOpacity>
               ))}
             </View>

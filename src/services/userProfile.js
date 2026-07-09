@@ -71,6 +71,7 @@ function getDefaultProfile() {
     coachId: 'hype',
     weeklyGoal: 4,
     units: 'lbs',
+    energyLabel: 'kcal', // 'kcal' | 'cal' — display label only; the value is identical
     restDuration: 90,
     workoutDays: [],  // [0,1,2,3,4,5,6] where 0=Mon, 6=Sun
     notificationsEnabled: false,
