@@ -283,7 +283,10 @@ export async function addRecentFood(food) {
 export async function resolveFoodItems(items) {
   const list = Array.isArray(items) ? items : [];
   return Promise.all(list.map(async (it) => {
-    const results = await searchFoods(it.query, { limit: 1 });
+    // Fetch a REAL candidate pool — with limit 1 the API returns only its own
+    // top hit (often a junk branded entry) and scoreMatch has nothing to
+    // re-rank, which is how "3 eggs" once matched a 513 kcal/100g "Egg".
+    const results = await searchFoods(it.query, { limit: 20 });
     const food = results[0] || null;
     return {
       query: it.query,
