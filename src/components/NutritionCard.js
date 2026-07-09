@@ -160,17 +160,6 @@ export default function NutritionCard({ navigation }) {
             <Text style={{ fontSize: 12, color: colors.textMuted }}>
               {stats.mealCount} meal{stats.mealCount !== 1 ? 's' : ''} logged today
             </Text>
-            {stats.pendingCount > 0 && (
-              <View style={{
-                paddingHorizontal: 6, paddingVertical: 2,
-                borderRadius: RADIUS.round,
-                backgroundColor: colors.orange + '20',
-              }}>
-                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.orange }}>
-                  {stats.pendingCount} pending
-                </Text>
-              </View>
-            )}
           </View>
         )}
       </TouchableOpacity>

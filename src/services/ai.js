@@ -377,8 +377,7 @@ async function buildCoachDataSnapshot(memory, profile) {
   if (nStats && (nStats.mealCount > 0 || (nStats.totals && nStats.totals.kcal > 0))) {
     const tt = nStats.totals || {};
     const tg = nStats.targets || {};
-    let s = `Nutrition today: ${tt.kcal || 0}${tg.kcal ? '/' + tg.kcal : ''} kcal, ${tt.protein || 0}${tg.protein ? '/' + tg.protein : ''}g protein.`;
-    if (nStats.pendingCount > 0) s += ` ${nStats.pendingCount} meal(s) pending review.`;
+    const s = `Nutrition today: ${tt.kcal || 0}${tg.kcal ? '/' + tg.kcal : ''} kcal, ${tt.protein || 0}${tg.protein ? '/' + tg.protein : ''}g protein.`;
     lines.push(s);
   } else {
     lines.push('Nutrition: nothing logged today.');

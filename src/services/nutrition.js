@@ -2,9 +2,10 @@
 // NUTRITION SERVICE — Track meals & macros over time
 //
 // Local-first (AsyncStorage), mirroring bodyWeight.js. Stores
-// per-meal entries with macros + an editState so AI photo
-// estimates don't count toward daily totals until the user
-// confirms them (UX honesty — see TASKS T9).
+// per-meal entries with macros. Every logged entry counts —
+// all logging flows (voice review, portion picker, manual form)
+// have their own review step, so a separate confirm would be
+// double-confirmation. editState survives as provenance metadata.
 //
 // NAMING: "kcal" = calories CONSUMED. The rest of the app uses
 // "calories" for calories BURNED (workouts, feed posts, the
@@ -18,12 +19,6 @@ const NUTRITION_KEY = 'sayfit_nutrition_log';
 
 // Meal types, ordered for display.
 export const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
-
-// editState lifecycle: 'ai_estimated' -> 'user_edited' -> 'confirmed'.
-// Only counted states contribute to daily totals; a raw 'ai_estimated'
-// photo guess does NOT, so an un-reviewed estimate can't silently skew
-// the "am I winning?" numbers.
-const COUNTED_STATES = ['confirmed', 'user_edited', 'manual'];
 
 const EMPTY_MACROS = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
 
@@ -39,10 +34,6 @@ function dayKey(dateIso) {
   const d = dateIso ? new Date(dateIso) : new Date();
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-function counts(entry) {
-  return COUNTED_STATES.includes(entry.editState);
 }
 
 function sumMacros(entries) {
@@ -63,8 +54,7 @@ export async function getNutritionEntries() {
 
 /**
  * Log a meal. Multiple meals per day are allowed (unlike a daily weigh-in).
- * 'manual' source defaults to editState 'confirmed'; 'photo'/'voice' default
- * to 'ai_estimated' (won't count toward totals until reviewed).
+ * Logged means counted — no separate confirm step.
  */
 export async function logMeal({
   mealType = 'snack', source = 'manual', photoUri = null,
@@ -81,7 +71,7 @@ export async function logMeal({
       items: Array.isArray(items) ? items : [],
       macros: sanitizeMacros(macros),
       confidence: typeof confidence === 'number' ? confidence : null,
-      editState: editState || (source === 'manual' ? 'confirmed' : 'ai_estimated'),
+      editState: editState || 'confirmed',
     };
     entries.push(entry);
     await safeWriteArray(NUTRITION_KEY, entries);
@@ -92,10 +82,7 @@ export async function logMeal({
   }
 }
 
-/**
- * Update an entry (e.g. the user corrects AI-estimated macros). Editing a raw
- * AI estimate promotes it to 'user_edited' so it starts counting.
- */
+/** Update an entry (e.g. the user corrects AI-estimated macros). */
 export async function updateMeal(entryId, updates = {}) {
   try {
     const entries = await getNutritionEntries();
@@ -107,9 +94,6 @@ export async function updateMeal(entryId, updates = {}) {
       ...updates,
       macros: updates.macros ? sanitizeMacros(updates.macros) : prev.macros,
     };
-    if (prev.editState === 'ai_estimated' && !updates.editState) {
-      next.editState = 'user_edited';
-    }
     entries[idx] = next;
     await safeWriteArray(NUTRITION_KEY, entries);
     return next;
@@ -117,11 +101,6 @@ export async function updateMeal(entryId, updates = {}) {
     console.warn('[Nutrition] Failed to update:', e);
     return null;
   }
-}
-
-/** Mark an entry confirmed so it counts toward daily totals. */
-export async function confirmMeal(entryId) {
-  return updateMeal(entryId, { editState: 'confirmed' });
 }
 
 export async function deleteMeal(entryId) {
@@ -141,21 +120,16 @@ export async function clearNutritionLog() {
 
 // ---- AGGREGATION ----
 
-/**
- * Totals for a single day (defaults to today). Only counted entries
- * (confirmed/user_edited/manual) contribute; un-reviewed 'ai_estimated'
- * guesses are surfaced as `pendingCount` so the UI can prompt to confirm.
- */
+/** Totals for a single day (defaults to today). Every entry counts. */
 export async function getDailyTotals(date = null) {
   const entries = await getNutritionEntries();
   const key = dayKey(date || new Date().toISOString());
   const ofDay = entries.filter(e => dayKey(e.date) === key);
-  const counted = ofDay.filter(counts);
   return {
     date: key,
-    totals: sumMacros(counted),
-    mealCount: counted.length,
-    pendingCount: ofDay.length - counted.length,
+    totals: sumMacros(ofDay),
+    mealCount: ofDay.length,
+    pendingCount: 0, // legacy field — the confirm step no longer exists
     entries: ofDay.sort((a, b) => new Date(a.date) - new Date(b.date)),
   };
 }
@@ -184,12 +158,11 @@ export async function getNutritionStats(targets = null) {
   };
 }
 
-/** Daily kcal/protein/carbs/fat chart data over the last N days (counted only). */
+/** Daily kcal/protein/carbs/fat chart data over the last N days. */
 export async function getMacroChartData(limit = 30) {
   const entries = await getNutritionEntries();
   const byDay = {};
   for (const e of entries) {
-    if (!counts(e)) continue;
     const key = dayKey(e.date);
     if (!byDay[key]) byDay[key] = { ...EMPTY_MACROS };
     byDay[key].kcal += e.macros?.kcal || 0;

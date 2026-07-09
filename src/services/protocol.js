@@ -273,7 +273,7 @@ export async function updateDose(entryId, updates = {}) {
   }
 }
 
-// Semantic shortcut mirroring confirmMeal — satisfies "user-confirmed dose".
+// Semantic shortcut — satisfies "user-confirmed dose" (App Store 1.4.2).
 export async function confirmDose(entryId) {
   return updateDose(entryId, { editState: 'confirmed' });
 }

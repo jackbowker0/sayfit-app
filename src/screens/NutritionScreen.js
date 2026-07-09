@@ -31,7 +31,7 @@ import { SPACING, RADIUS, FONT, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getMacroTargets, saveMacroTargets, getUserProfile } from '../services/userProfile';
 import { estimateTDEE, targetsFromCalories } from '../services/energy';
-import { getDailyTotals, logMeal, deleteMeal, confirmMeal, MEAL_TYPES } from '../services/nutrition';
+import { getDailyTotals, logMeal, deleteMeal, MEAL_TYPES } from '../services/nutrition';
 import { addRecentFood } from '../services/foodDb';
 import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
@@ -224,19 +224,14 @@ export default function NutritionScreen({ navigation }) {
   // ---- Entry actions (tap a diary row) ----
   const onEntryPress = (entry) => {
     haptics.tap();
-    const pending = entry.editState === 'ai_estimated';
-    const buttons = [{ text: 'Cancel', style: 'cancel' }];
-    if (pending) {
-      buttons.push({
-        text: 'Confirm', onPress: async () => { haptics.success(); await confirmMeal(entry.id); await loadData(); },
-      });
-    }
-    buttons.push({
-      text: 'Delete', style: 'destructive',
-      onPress: async () => { haptics.medium(); await deleteMeal(entry.id); await loadData(); },
-    });
     const name = entry.items?.map((i) => i.name).join(', ') || cap(entry.mealType);
-    Alert.alert(name, `${entry.macros.kcal} ${energyLabel}${pending ? ' · pending — confirm to count it' : ''}`, buttons);
+    Alert.alert(name, `${entry.macros.kcal} ${energyLabel}`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => { haptics.medium(); await deleteMeal(entry.id); await loadData(); },
+      },
+    ]);
   };
 
   // ---- Derived ----
@@ -324,11 +319,6 @@ export default function NutritionScreen({ navigation }) {
             <MacroBar label="FAT" consumed={totals.fat} target={targets.fat} colors={colors} />
           </View>
 
-          {dailyData?.pendingCount > 0 && (
-            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 10 }}>
-              {dailyData.pendingCount} pending entr{dailyData.pendingCount > 1 ? 'ies' : 'y'} not counted — tap it below to confirm.
-            </Text>
-          )}
         </GlassCard>
 
         {/* Targets form (toggled) */}
@@ -414,7 +404,6 @@ export default function NutritionScreen({ navigation }) {
                   {items.length > 0 && (
                     <View style={{ borderTopWidth: 1, borderTopColor: colors.glassBorder }}>
                       {items.map((entry, i) => {
-                        const pending = entry.editState === 'ai_estimated';
                         const name = entry.items?.map((it) => it.name).join(', ') || cap(entry.mealType);
                         return (
                           <TouchableOpacity
@@ -422,7 +411,7 @@ export default function NutritionScreen({ navigation }) {
                             onPress={() => onEntryPress(entry)}
                             activeOpacity={0.7}
                             accessibilityRole="button"
-                            accessibilityLabel={`${name}, ${entry.macros.kcal} ${energyLabel}${pending ? ', pending' : ''}`}
+                            accessibilityLabel={`${name}, ${entry.macros.kcal} ${energyLabel}`}
                             style={{
                               flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11,
                               borderBottomWidth: i < items.length - 1 ? 1 : 0, borderBottomColor: colors.glassBorder,
@@ -433,10 +422,9 @@ export default function NutritionScreen({ navigation }) {
                               <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>
                                 {new Date(entry.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                                 {entry.macros.protein > 0 ? ` · P${entry.macros.protein}` : ''}
-                                {pending ? ' · pending — tap to confirm' : ''}
                               </Text>
                             </View>
-                            <Text style={{ fontSize: 13.5, color: pending ? colors.textMuted : colors.textSecondary, fontVariant: ['tabular-nums'] }}>
+                            <Text style={{ fontSize: 13.5, color: colors.textSecondary, fontVariant: ['tabular-nums'] }}>
                               {entry.macros.kcal}
                             </Text>
                           </TouchableOpacity>

@@ -235,12 +235,8 @@ export default function DashboardScreen({ navigation }) {
     };
 
     // Snap Meal
-    const pending = n.pendingCount || 0;
     const meals = n.mealCount || 0;
-    let mealStatus;
-    if (pending > 0) mealStatus = `${pending} to review`;
-    else if (meals > 0) mealStatus = `${meals} logged today`;
-    else mealStatus = 'No meals today';
+    const mealStatus = meals > 0 ? `${meals} logged today` : 'No meals today';
     const mealTile = {
       key: 'meal',
       Icon: Camera,

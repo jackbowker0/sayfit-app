@@ -59,15 +59,10 @@ function timeAgoLabel(iso) {
 // Returns '' when no target is set (silent degrade — never prints "0").
 function macroClause(nutri) {
   if (!nutri || !nutri.remaining) return '';
-  const { remaining, mealCount, pendingCount = 0 } = nutri;
+  const { remaining, mealCount } = nutri;
 
   const clauseFor = (rem, label, unit) => {
-    if (mealCount === 0) {
-      // Be honest about unreviewed AI/voice meals instead of claiming "none".
-      return pendingCount > 0
-        ? ` · ${pendingCount} meal${pendingCount === 1 ? '' : 's'} pending review.`
-        : ' · No meals logged yet today.';
-    }
+    if (mealCount === 0) return ' · No meals logged yet today.';
     if (rem <= 0) return ` · ${label} hit.`;
     return ` · ${rem}${unit} ${label.toLowerCase()} to go.`;
   };
