@@ -184,7 +184,8 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
             keyExtractor={(item, i) => item.id || `row-${i}`}
             renderItem={renderRow}
             keyboardShouldPersistTaps="handled"
-            style={{ marginTop: 8 }}
+            style={{ flex: 1, marginTop: 8 }}
+            contentContainerStyle={{ flexGrow: 1 }}
             ListEmptyComponent={
               <Text style={{ ...FONT.caption, color: colors.textMuted, textAlign: 'center', marginTop: 32 }}>
                 {searching ? 'Searching…'
