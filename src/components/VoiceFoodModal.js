@@ -139,7 +139,16 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
   const logIt = async () => {
     if (matched.length === 0) return;
     haptics.success();
-    await logMeal({ source: 'voice', mealType, items: matched.map((it) => ({ name: it.food.name, qty: 1 })), macros: total });
+    // This review screen IS the confirmation — the user checked every item and
+    // tapped Log — so the entry counts immediately instead of sitting 'pending'
+    // (that state is for un-reviewed auto-estimates only).
+    await logMeal({
+      source: 'voice',
+      mealType,
+      items: matched.map((it) => ({ name: it.food.name, qty: 1 })),
+      macros: total,
+      editState: 'confirmed',
+    });
     matched.forEach((it) => addRecentFood(it.food).catch(() => {}));
     onLogged?.();
     onClose();

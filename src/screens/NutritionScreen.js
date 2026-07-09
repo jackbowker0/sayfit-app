@@ -1,9 +1,16 @@
 // ============================================================
-// NUTRITION SCREEN — Manual meal & macro tracker
+// FUEL SCREEN — "Budget" layout (redesign variant A, Jack-approved)
 //
-// Mirrors WeightScreen: stats header, add-meal form, entry list
-// with delete. Targets sourced from userProfile.getMacroTargets;
-// if unset, a "Set targets" affordance lets the user save them.
+// Structure: calories-left hero (big remaining number + progress
+// bar + macro bars) → Voice/Search/Scan action row → adaptive
+// maintenance chip → meal diary (Breakfast/Lunch/Dinner/Snacks,
+// per-item calories, quiet add per section) → manual entry as a
+// collapsible fallback.
+//
+// Logging model: search/scan/voice all REVIEW before logging (the
+// portion step / voice review IS the confirmation), so entries land
+// editState 'confirmed' and count immediately. 'pending' only exists
+// for future un-reviewed auto-estimates.
 // ============================================================
 
 import React, { useState, useCallback } from 'react';
@@ -15,16 +22,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode, TrendingUp, Mic,
+  Apple, Search, ScanBarcode, TrendingUp, Mic, Plus, ChevronDown, ChevronUp,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
 import { COACHES } from '../constants/coaches';
-import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
+import { SPACING, RADIUS, FONT, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getMacroTargets, saveMacroTargets, getUserProfile } from '../services/userProfile';
 import { estimateTDEE, targetsFromCalories } from '../services/energy';
-import { getDailyTotals, logMeal, deleteMeal, MEAL_TYPES } from '../services/nutrition';
+import { getDailyTotals, logMeal, deleteMeal, confirmMeal, MEAL_TYPES } from '../services/nutrition';
 import { addRecentFood } from '../services/foodDb';
 import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
@@ -33,24 +40,34 @@ import FoodSearchModal from '../components/FoodSearchModal';
 import BarcodeScannerModal from '../components/BarcodeScannerModal';
 import VoiceFoodModal from '../components/VoiceFoodModal';
 
-// Capitalise first letter
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 
-// ---- MacroBar: small progress indicator ----
-function MacroBar({ label, consumed, target, color, colors }) {
+// Sensible default section for quick voice logging, by local hour.
+function mealForNow() {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 16) return 'lunch';
+  if (h < 21) return 'dinner';
+  return 'snack';
+}
+
+// Thin labeled progress bar (label left, value right). Neutral by default so
+// the amber accent stays reserved; state is always label+number, never hue alone.
+function MacroBar({ label, consumed, target, accent, colors }) {
   const hasTarget = typeof target === 'number' && target > 0;
   const pct = hasTarget ? Math.min(consumed / target, 1) : 0;
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
         <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted }}>{label}</Text>
-        <Text style={{ fontSize: 11, fontWeight: '700', color, fontVariant: ['tabular-nums'] }}>
-          {consumed}{hasTarget ? `/${target}` : ''}
+        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>
+          {consumed}<Text style={{ color: colors.textMuted, fontWeight: '600' }}>{hasTarget ? `/${target}g` : 'g'}</Text>
         </Text>
       </View>
-      <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.glassBorder, overflow: 'hidden' }}>
+      <View style={{ height: 5, borderRadius: 3, backgroundColor: colors.bgSubtle, overflow: 'hidden' }}>
         {hasTarget && (
-          <View style={{ height: 4, width: `${pct * 100}%`, borderRadius: 2, backgroundColor: color }} />
+          <View style={{ height: 5, width: `${pct * 100}%`, borderRadius: 3, backgroundColor: accent || colors.textMuted }} />
         )}
       </View>
     </View>
@@ -59,63 +76,35 @@ function MacroBar({ label, consumed, target, color, colors }) {
 
 export default function NutritionScreen({ navigation }) {
   const { coachId } = useWorkoutContext();
-  const coach = COACHES[coachId];
-  const { colors, isDark } = useTheme();
+  const coach = COACHES[coachId] || COACHES.hype;
+  const { colors } = useTheme();
 
   // ---- Data state ----
   const [dailyData, setDailyData] = useState(null);
   const [targets, setTargets] = useState({ kcal: null, protein: null, carbs: null, fat: null });
-  const [energyLabel, setEnergyLabel] = useState('kcal'); // 'kcal' | 'cal' — display only
-  const [tdeeEst, setTdeeEst] = useState(null); // adaptive maintenance estimate or null
-
-  // Set the calorie target from the estimate (maintenance, or a -500 cut).
-  const applyTdeeTarget = async (kcal) => {
-    haptics.success();
-    const t = targetsFromCalories(kcal);
-    await saveMacroTargets(t);
-    setTargets(t);
-    setSetTargetMode(false);
-    await loadData();
-  };
+  const [energyLabel, setEnergyLabel] = useState('kcal');
+  const [tdeeEst, setTdeeEst] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ---- Add-meal form state ----
-  const [mealType, setMealType] = useState('breakfast');
+  // ---- Modals / flows ----
+  const [foodSearchVisible, setFoodSearchVisible] = useState(false);
+  const [scanVisible, setScanVisible] = useState(false);
+  const [voiceVisible, setVoiceVisible] = useState(false);
+  const [initialFood, setInitialFood] = useState(null);   // seeds the portion step (from a scan)
+  const [activeMeal, setActiveMeal] = useState('breakfast'); // which diary section is being added to
+  const [pickSource, setPickSource] = useState('search');    // 'search' | 'barcode' for the log tag
+
+  // ---- Manual entry (collapsible fallback) ----
+  const [manualOpen, setManualOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [kcalInput, setKcalInput] = useState('');
   const [proteinInput, setProteinInput] = useState('');
   const [carbsInput, setCarbsInput] = useState('');
   const [fatInput, setFatInput] = useState('');
   const [saving, setSaving] = useState(false);
-  const [foodSearchVisible, setFoodSearchVisible] = useState(false);
-  const [scanVisible, setScanVisible] = useState(false);
-  const [voiceVisible, setVoiceVisible] = useState(false);
-  const [initialFood, setInitialFood] = useState(null); // seeds the portion step (from a scan)
-  const [foodSource, setFoodSource] = useState('manual'); // 'manual' | 'search' | 'barcode'
 
-  // A food picked from search/scan pre-fills the macro form; the user still
-  // reviews and taps Log, so nothing is auto-logged.
-  const handleFoodPick = (food, grams, macros) => {
-    setDescription(food.brand ? `${food.name} (${food.brand})` : food.name);
-    setKcalInput(String(macros.kcal));
-    setProteinInput(String(macros.protein));
-    setCarbsInput(String(macros.carbs));
-    setFatInput(String(macros.fat));
-    setFoodSource(initialFood ? 'barcode' : 'search');
-    addRecentFood(food).catch(() => {});
-    setFoodSearchVisible(false);
-    setInitialFood(null);
-  };
-
-  // A scanned barcode resolved to a food → hand it to the portion step.
-  const handleScanFound = (food) => {
-    setScanVisible(false);
-    setInitialFood(food);
-    setFoodSearchVisible(true);
-  };
-
-  // ---- Set-targets form (only visible when targets unset) ----
+  // ---- Targets form ----
   const [setTargetMode, setSetTargetMode] = useState(false);
   const [tKcal, setTKcal] = useState('');
   const [tProtein, setTProtein] = useState('');
@@ -136,13 +125,40 @@ export default function NutritionScreen({ navigation }) {
     setLoading(false);
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
+  const handleRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
+
+  // ---- Targets ----
+  const applyTdeeTarget = async (kcal) => {
+    haptics.success();
+    const t = targetsFromCalories(kcal);
+    await saveMacroTargets(t);
+    setTargets(t);
     await loadData();
-    setRefreshing(false);
   };
 
-  // ---- Save macro targets ----
+  const offerTdeeTarget = () => {
+    if (!tdeeEst) return;
+    haptics.tap();
+    Alert.alert(
+      'Update calorie target',
+      `Your data says maintenance is ~${tdeeEst.tdee} ${energyLabel}/day (from ${tdeeEst.loggedDays} logged days).`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: `Maintain (${tdeeEst.tdee})`, onPress: () => applyTdeeTarget(tdeeEst.tdee) },
+        { text: `Cut −500 (${Math.max(1000, tdeeEst.tdee - 500)})`, onPress: () => applyTdeeTarget(Math.max(1000, tdeeEst.tdee - 500)) },
+      ],
+    );
+  };
+
+  const openTargetForm = () => {
+    haptics.tap();
+    setTKcal(targets.kcal?.toString() || '');
+    setTProtein(targets.protein?.toString() || '');
+    setTCarbs(targets.carbs?.toString() || '');
+    setTFat(targets.fat?.toString() || '');
+    setSetTargetMode((v) => !v);
+  };
+
   const handleSaveTargets = async () => {
     const t = {
       kcal: parseInt(tKcal, 10) || null,
@@ -156,253 +172,198 @@ export default function NutritionScreen({ navigation }) {
     setSetTargetMode(false);
   };
 
-  // ---- Log a meal ----
+  // ---- Add flows ----
+  const openSearchFor = (meal) => { haptics.tap(); setActiveMeal(meal); setPickSource('search'); setInitialFood(null); setFoodSearchVisible(true); };
+  const openScan = () => { haptics.tap(); setActiveMeal(mealForNow()); setScanVisible(true); };
+  const openVoice = () => { haptics.tap(); setActiveMeal(mealForNow()); setVoiceVisible(true); };
+
+  // Search/scan pick: the portion step WAS the review — log it directly, confirmed.
+  const handleFoodPick = async (food, grams, macros) => {
+    setFoodSearchVisible(false);
+    setInitialFood(null);
+    haptics.success();
+    await logMeal({
+      source: pickSource,
+      mealType: activeMeal,
+      items: [{ name: food.brand ? `${food.name} (${food.brand})` : food.name, qty: 1 }],
+      macros,
+      editState: 'confirmed',
+    });
+    capture('meal_logged', { source: pickSource, mealType: activeMeal, hasDescription: true });
+    addRecentFood(food).catch(() => {});
+    await loadData();
+  };
+
+  const handleScanFound = (food) => {
+    setScanVisible(false);
+    setPickSource('barcode');
+    setInitialFood(food);
+    setFoodSearchVisible(true); // jumps straight to the portion step
+  };
+
+  // ---- Manual entry ----
   const handleLog = async () => {
     const kcal = parseInt(kcalInput, 10);
-    const protein = parseFloat(proteinInput) || 0;
-    const carbs = parseFloat(carbsInput) || 0;
-    const fat = parseFloat(fatInput) || 0;
-
-    if (!kcal || kcal <= 0) {
-      Alert.alert('Missing info', `Enter at least ${energyLabel} to log a meal.`);
-      return;
-    }
+    if (!kcal || kcal <= 0) { Alert.alert('Missing info', `Enter at least ${energyLabel} to log a meal.`); return; }
     haptics.success();
     setSaving(true);
     const items = description.trim() ? [{ name: description.trim(), qty: 1 }] : [];
     await logMeal({
-      source: foodSource,
-      mealType,
+      source: 'manual',
+      mealType: activeMeal,
       items,
-      macros: { kcal, protein, carbs, fat },
+      macros: { kcal, protein: parseFloat(proteinInput) || 0, carbs: parseFloat(carbsInput) || 0, fat: parseFloat(fatInput) || 0 },
     });
-    // Analytics must NOT carry the actual macro values (dietary health data).
-    // Keep only the meal type, entry source, and whether a description was added.
-    capture('meal_logged', {
-      source: foodSource,
-      mealType,
-      hasDescription: items.length > 0,
-    });
-    // Reset form
-    setDescription('');
-    setKcalInput('');
-    setProteinInput('');
-    setCarbsInput('');
-    setFatInput('');
-    setFoodSource('manual');
+    capture('meal_logged', { source: 'manual', mealType: activeMeal, hasDescription: items.length > 0 });
+    setDescription(''); setKcalInput(''); setProteinInput(''); setCarbsInput(''); setFatInput('');
+    setManualOpen(false);
     await loadData();
     setSaving(false);
   };
 
-  // ---- Delete a meal ----
-  const handleDelete = (entry) => {
+  // ---- Entry actions (tap a diary row) ----
+  const onEntryPress = (entry) => {
     haptics.tap();
-    Alert.alert(
-      'Delete meal',
-      `Remove ${cap(entry.mealType)} from today?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive', onPress: async () => {
-            haptics.medium();
-            await deleteMeal(entry.id);
-            await loadData();
-          },
-        },
-      ]
-    );
+    const pending = entry.editState === 'ai_estimated';
+    const buttons = [{ text: 'Cancel', style: 'cancel' }];
+    if (pending) {
+      buttons.push({
+        text: 'Confirm', onPress: async () => { haptics.success(); await confirmMeal(entry.id); await loadData(); },
+      });
+    }
+    buttons.push({
+      text: 'Delete', style: 'destructive',
+      onPress: async () => { haptics.medium(); await deleteMeal(entry.id); await loadData(); },
+    });
+    const name = entry.items?.map((i) => i.name).join(', ') || cap(entry.mealType);
+    Alert.alert(name, `${entry.macros.kcal} ${energyLabel}${pending ? ' · pending — confirm to count it' : ''}`, buttons);
   };
 
+  // ---- Derived ----
   const totals = dailyData?.totals || { kcal: 0, protein: 0, carbs: 0, fat: 0 };
   const entries = dailyData?.entries || [];
-  const hasTargets = targets && (targets.kcal || targets.protein);
+  const hasKcalTarget = typeof targets?.kcal === 'number' && targets.kcal > 0;
+  const remaining = hasKcalTarget ? Math.max(0, targets.kcal - totals.kcal) : null;
+  const overBy = hasKcalTarget && totals.kcal > targets.kcal ? totals.kcal - targets.kcal : 0;
+  const pct = hasKcalTarget ? Math.min(totals.kcal / targets.kcal, 1) : 0;
+  const byMeal = MEAL_TYPES.map((mt) => ({
+    meal: mt,
+    items: entries.filter((e) => e.mealType === mt),
+  }));
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const actionBtn = (onPress, label, Icon, primary = false) => (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+        paddingVertical: 13, borderRadius: RADIUS.md, borderWidth: 1,
+        borderColor: primary ? coach.color : colors.glassBorder,
+        backgroundColor: primary ? coach.color : colors.glassBg,
+      }}
+    >
+      <Icon size={15} color={primary ? getTextOnColor(coach.color) : coach.color} strokeWidth={2.4} />
+      <Text style={{ ...FONT.caption, fontWeight: '700', color: primary ? getTextOnColor(coach.color) : colors.textPrimary }}>{label}</Text>
+    </TouchableOpacity>
+  );
 
   // ----- Render -----
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
       <ScrollView
-        contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 32 }}
+        contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={coach.color} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={coach.color} />}
       >
-
-        {/* ---- Header ---- */}
-        <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <UtensilsCrossed size={24} color={coach.color} strokeWidth={2} />
-              <Text style={{ ...FONT.title, color: colors.textPrimary }}>Nutrition</Text>
-            </View>
-            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4, marginLeft: 34 }}>
-              Track your meals and macros
-            </Text>
-          </View>
+        {/* Header */}
+        <FadeInView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+          <Text style={{ ...FONT.title, color: colors.textPrimary }}>Fuel</Text>
+          <Text style={{ ...FONT.caption, color: colors.textMuted }}>{dateStr}</Text>
         </FadeInView>
 
-        {/* ---- Today's totals header card ---- */}
-        <GlassCard fadeDelay={80} accentColor={coach.color} glow>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={{ ...FONT.label, color: colors.textMuted }}>Today</Text>
-            {!hasTargets && (
-              <TouchableOpacity
-                onPress={() => { haptics.tap(); setSetTargetMode(v => !v); }}
-                style={{
-                  paddingHorizontal: 10, paddingVertical: 4,
-                  borderRadius: RADIUS.sm, backgroundColor: coach.color + '18',
-                  borderWidth: 1, borderColor: coach.color + '35',
-                }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: '700', color: coach.color }}>Set targets</Text>
-              </TouchableOpacity>
+        {/* Hero — calories left */}
+        <GlassCard fadeDelay={60} accentColor={coach.color}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ ...FONT.label, color: colors.textMuted }}>
+              {hasKcalTarget ? (overBy > 0 ? `OVER TARGET (${energyLabel.toUpperCase()})` : `${energyLabel.toUpperCase()} LEFT TODAY`) : `${energyLabel.toUpperCase()} EATEN TODAY`}
+            </Text>
+            <TouchableOpacity onPress={openTargetForm} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Edit targets">
+              <Text style={{ fontSize: 11, fontWeight: '600', color: hasKcalTarget ? colors.textMuted : coach.color }}>
+                {hasKcalTarget ? 'Edit targets' : 'Set a target'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{ fontSize: 42, fontWeight: '800', letterSpacing: -1, color: colors.textPrimary, marginTop: 6, fontVariant: ['tabular-nums'] }}>
+            {hasKcalTarget ? (overBy > 0 ? `+${overBy}` : remaining) : totals.kcal}
+            {hasKcalTarget && (
+              <Text style={{ fontSize: 15, fontWeight: '600', letterSpacing: 0, color: colors.textMuted }}>  / {targets.kcal}</Text>
             )}
-            {hasTargets && (
-              <TouchableOpacity
-                onPress={() => {
-                  haptics.tap();
-                  setTKcal(targets.kcal?.toString() || '');
-                  setTProtein(targets.protein?.toString() || '');
-                  setTCarbs(targets.carbs?.toString() || '');
-                  setTFat(targets.fat?.toString() || '');
-                  setSetTargetMode(v => !v);
-                }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>Edit targets</Text>
-              </TouchableOpacity>
-            )}
+          </Text>
+
+          {hasKcalTarget && (
+            <>
+              <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.bgSubtle, overflow: 'hidden', marginTop: 12 }}>
+                <View style={{ height: 8, width: `${pct * 100}%`, borderRadius: 4, backgroundColor: coach.color }} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                <Text style={{ fontSize: 11.5, color: colors.textMuted, fontVariant: ['tabular-nums'] }}>{totals.kcal} eaten</Text>
+                <Text style={{ fontSize: 11.5, color: colors.textMuted, fontVariant: ['tabular-nums'] }}>target {targets.kcal}</Text>
+              </View>
+            </>
+          )}
+
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+            <MacroBar label="PROTEIN" consumed={totals.protein} target={targets.protein} accent={coach.color} colors={colors} />
+            <MacroBar label="CARBS" consumed={totals.carbs} target={targets.carbs} colors={colors} />
+            <MacroBar label="FAT" consumed={totals.fat} target={targets.fat} colors={colors} />
           </View>
 
-          {/* Primary: kcal + protein */}
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 14 }}>
-            <GlassCard style={{ flex: 1, alignItems: 'center', marginBottom: 0 }} accentColor={coach.color} glow>
-              <Flame size={14} color={coach.color} strokeWidth={2.5} style={{ marginBottom: 4 }} />
-              <Text style={{ ...FONT.stat, color: coach.color }}>{totals.kcal}</Text>
-              {targets.kcal ? (
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-                  / {targets.kcal} {energyLabel.toUpperCase()}
-                </Text>
-              ) : (
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{energyLabel.toUpperCase()}</Text>
-              )}
-            </GlassCard>
-            <GlassCard style={{ flex: 1, alignItems: 'center', marginBottom: 0 }} accentColor={colors.blue}>
-              <Beef size={14} color={colors.blue} strokeWidth={2.5} style={{ marginBottom: 4 }} />
-              <Text style={{ ...FONT.stat, color: colors.blue }}>{totals.protein}g</Text>
-              {targets.protein ? (
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>
-                  / {targets.protein}g PROTEIN
-                </Text>
-              ) : (
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>PROTEIN</Text>
-              )}
-            </GlassCard>
-          </View>
-
-          {/* Secondary: carbs + fat macro bars */}
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <MacroBar
-              label="CARBS"
-              consumed={totals.carbs}
-              target={targets.carbs}
-              color={colors.orange}
-              colors={colors}
-            />
-            <MacroBar
-              label="FAT"
-              consumed={totals.fat}
-              target={targets.fat}
-              color={colors.yellow}
-              colors={colors}
-            />
-          </View>
-
-          {/* Pending note */}
           {dailyData?.pendingCount > 0 && (
-            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 8 }}>
-              {dailyData.pendingCount} pending meal{dailyData.pendingCount > 1 ? 's' : ''} (not yet confirmed)
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 10 }}>
+              {dailyData.pendingCount} pending entr{dailyData.pendingCount > 1 ? 'ies' : 'y'} not counted — tap it below to confirm.
             </Text>
           )}
         </GlassCard>
 
-        {/* ---- Set targets inline form ---- */}
+        {/* Targets form (toggled) */}
         {setTargetMode && (
-          <GlassCard fadeDelay={50} accentColor={coach.color}>
-            <Text style={{ ...FONT.subhead, color: colors.textPrimary, marginBottom: 12 }}>
-              Daily targets
-            </Text>
+          <GlassCard fadeDelay={40} accentColor={coach.color}>
+            <Text style={{ ...FONT.subhead, color: colors.textPrimary, marginBottom: 12 }}>Daily targets</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>KCAL</Text>
-                <TextInput
-                  style={inputStyle(colors)}
-                  value={tKcal}
-                  onChangeText={setTKcal}
-                  keyboardType="numeric"
-                  placeholder="2000"
-                  placeholderTextColor={colors.textDim}
-                  returnKeyType="next"
-                />
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>{energyLabel.toUpperCase()}</Text>
+                <TextInput style={inputStyle(colors)} value={tKcal} onChangeText={setTKcal} keyboardType="numeric" placeholder="2200" placeholderTextColor={colors.textDim} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>PROTEIN (g)</Text>
-                <TextInput
-                  style={inputStyle(colors)}
-                  value={tProtein}
-                  onChangeText={setTProtein}
-                  keyboardType="decimal-pad"
-                  placeholder="150"
-                  placeholderTextColor={colors.textDim}
-                  returnKeyType="next"
-                />
+                <TextInput style={inputStyle(colors)} value={tProtein} onChangeText={setTProtein} keyboardType="decimal-pad" placeholder="180" placeholderTextColor={colors.textDim} />
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>CARBS (g)</Text>
-                <TextInput
-                  style={inputStyle(colors)}
-                  value={tCarbs}
-                  onChangeText={setTCarbs}
-                  keyboardType="decimal-pad"
-                  placeholder="200"
-                  placeholderTextColor={colors.textDim}
-                  returnKeyType="next"
-                />
+                <TextInput style={inputStyle(colors)} value={tCarbs} onChangeText={setTCarbs} keyboardType="decimal-pad" placeholder="255" placeholderTextColor={colors.textDim} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>FAT (g)</Text>
-                <TextInput
-                  style={inputStyle(colors)}
-                  value={tFat}
-                  onChangeText={setTFat}
-                  keyboardType="decimal-pad"
-                  placeholder="60"
-                  placeholderTextColor={colors.textDim}
-                  returnKeyType="done"
-                  onSubmitEditing={handleSaveTargets}
-                />
+                <TextInput style={inputStyle(colors)} value={tFat} onChangeText={setTFat} keyboardType="decimal-pad" placeholder="63" placeholderTextColor={colors.textDim} onSubmitEditing={handleSaveTargets} returnKeyType="done" />
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
-                style={{
-                  flex: 1, alignItems: 'center', paddingVertical: 12,
-                  borderRadius: RADIUS.md, backgroundColor: colors.glassBg,
-                  borderWidth: 1, borderColor: colors.glassBorder,
-                }}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: RADIUS.md, backgroundColor: colors.glassBg, borderWidth: 1, borderColor: colors.glassBorder }}
                 onPress={() => { haptics.tap(); setSetTargetMode(false); }}
               >
                 <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textSecondary }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{
-                  flex: 2, alignItems: 'center', paddingVertical: 12,
-                  borderRadius: RADIUS.md, backgroundColor: coach.color,
-                  ...(isDark ? { shadowColor: coach.color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: GLOW.md } : {}),
-                }}
+                style={{ flex: 2, alignItems: 'center', paddingVertical: 12, borderRadius: RADIUS.md, backgroundColor: coach.color }}
                 onPress={handleSaveTargets}
               >
                 <Text style={{ fontSize: 14, fontWeight: '700', color: getTextOnColor(coach.color) }}>Save targets</Text>
@@ -411,258 +372,179 @@ export default function NutritionScreen({ navigation }) {
           </GlassCard>
         )}
 
-        {/* ---- Adaptive maintenance estimate ---- */}
+        {/* Action row */}
+        <FadeInView delay={90} style={{ flexDirection: 'row', gap: 8, marginBottom: SPACING.md }}>
+          {actionBtn(openVoice, 'Voice', Mic, true)}
+          {actionBtn(() => openSearchFor(mealForNow()), 'Search', Search)}
+          {actionBtn(openScan, 'Scan', ScanBarcode)}
+        </FadeInView>
+
+        {/* Adaptive maintenance chip */}
         {tdeeEst && (
           <FadeInView delay={110}>
-            <GlassCard accentColor={coach.color}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <TrendingUp size={16} color={coach.color} strokeWidth={2.4} />
-                <Text style={{ ...FONT.subhead, color: colors.textPrimary }}>Adaptive maintenance</Text>
-              </View>
-              <Text style={{ ...FONT.stat, color: coach.color }}>
-                ~{tdeeEst.tdee} <Text style={{ ...FONT.label, color: colors.textMuted }}>{energyLabel}/day</Text>
-              </Text>
-              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4 }}>
-                From {tdeeEst.loggedDays} logged days · weight {tdeeEst.weightChange >= 0 ? '+' : ''}{tdeeEst.weightChange} {tdeeEst.units} over {tdeeEst.windowDays}d
-                {tdeeEst.confidence === 'low' ? ' · rough — keep logging' : ''}
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <TouchableOpacity onPress={() => applyTdeeTarget(tdeeEst.tdee)} activeOpacity={0.85}
-                  accessibilityRole="button" accessibilityLabel="Set maintenance calorie target"
-                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: coach.color }}>
-                  <Text style={{ ...FONT.caption, fontWeight: '700', color: getTextOnColor(coach.color) }}>Maintain</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => applyTdeeTarget(Math.max(1000, tdeeEst.tdee - 500))} activeOpacity={0.85}
-                  accessibilityRole="button" accessibilityLabel="Set cut calorie target, 500 below maintenance"
-                  style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14' }}>
-                  <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Cut −500</Text>
-                </TouchableOpacity>
-              </View>
-            </GlassCard>
+            <TouchableOpacity onPress={offerTdeeTarget} activeOpacity={0.75} accessibilityRole="button" accessibilityLabel="Update calorie target from adaptive maintenance">
+              <GlassCard style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 }}>
+                <TrendingUp size={15} color={coach.color} strokeWidth={2.4} />
+                <Text style={{ ...FONT.caption, color: colors.textSecondary, flex: 1 }}>
+                  Adaptive maintenance <Text style={{ fontWeight: '700', color: colors.textPrimary }}>~{tdeeEst.tdee} {energyLabel}/day</Text>
+                  {tdeeEst.confidence === 'low' ? ' · rough' : ''}
+                </Text>
+                <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Update target</Text>
+              </GlassCard>
+            </TouchableOpacity>
           </FadeInView>
         )}
 
-        {/* ---- Add meal form ---- */}
-        <GlassCard fadeDelay={120} accentColor={coach.color}>
-          <Text style={{ ...FONT.subhead, color: colors.textPrimary, marginBottom: 12 }}>Log a meal</Text>
-
-          {/* Meal type picker */}
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-            {MEAL_TYPES.map((mt) => (
-              <TouchableOpacity
-                key={mt}
-                style={{
-                  paddingHorizontal: 12, paddingVertical: 7,
-                  borderRadius: RADIUS.round,
-                  backgroundColor: mealType === mt ? coach.color : colors.glassBg,
-                  borderWidth: 1,
-                  borderColor: mealType === mt ? coach.color : colors.glassBorder,
-                }}
-                onPress={() => { haptics.tick(); setMealType(mt); }}
-              >
-                <Text style={{
-                  fontSize: 12, fontWeight: '600',
-                  color: mealType === mt ? getTextOnColor(coach.color) : colors.textSecondary,
-                }}>
-                  {cap(mt)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Food search + barcode — the primary path; manual entry stays below as fallback */}
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); setInitialFood(null); setFoodSearchVisible(true); }}
-              activeOpacity={0.8}
-              style={{
-                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-                paddingVertical: 12, borderRadius: RADIUS.md,
-                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Search the food database"
-            >
-              <Search size={16} color={coach.color} strokeWidth={2.4} />
-              <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Search food</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); setScanVisible(true); }}
-              activeOpacity={0.8}
-              style={{
-                width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md,
-                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Scan a barcode"
-            >
-              <ScanBarcode size={18} color={coach.color} strokeWidth={2.4} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); setVoiceVisible(true); }}
-              activeOpacity={0.8}
-              style={{
-                width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md,
-                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Log a meal by voice"
-            >
-              <Mic size={18} color={coach.color} strokeWidth={2.4} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Description (optional) */}
-          <TextInput
-            style={[inputStyle(colors), { marginBottom: 10 }]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Food description (optional)"
-            placeholderTextColor={colors.textDim}
-            maxLength={80}
-            returnKeyType="next"
-          />
-
-          {/* Macro inputs */}
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-            <View style={{ flex: 1.4 }}>
-              <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>KCAL *</Text>
-              <TextInput
-                style={inputStyle(colors)}
-                value={kcalInput}
-                onChangeText={setKcalInput}
-                keyboardType="numeric"
-                placeholder="450"
-                placeholderTextColor={colors.textDim}
-                returnKeyType="next"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>PROTEIN g</Text>
-              <TextInput
-                style={inputStyle(colors)}
-                value={proteinInput}
-                onChangeText={setProteinInput}
-                keyboardType="decimal-pad"
-                placeholder="30"
-                placeholderTextColor={colors.textDim}
-                returnKeyType="next"
-              />
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>CARBS g</Text>
-              <TextInput
-                style={inputStyle(colors)}
-                value={carbsInput}
-                onChangeText={setCarbsInput}
-                keyboardType="decimal-pad"
-                placeholder="50"
-                placeholderTextColor={colors.textDim}
-                returnKeyType="next"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>FAT g</Text>
-              <TextInput
-                style={inputStyle(colors)}
-                value={fatInput}
-                onChangeText={setFatInput}
-                keyboardType="decimal-pad"
-                placeholder="15"
-                placeholderTextColor={colors.textDim}
-                returnKeyType="done"
-                onSubmitEditing={handleLog}
-              />
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={{
-              backgroundColor: kcalInput ? coach.color : colors.bgSubtle,
-              paddingVertical: 14, borderRadius: RADIUS.md,
-              alignItems: 'center',
-              ...(kcalInput && isDark ? {
-                shadowColor: coach.color,
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.3,
-                shadowRadius: GLOW.md,
-              } : {}),
-            }}
-            onPress={handleLog}
-            disabled={saving || !kcalInput}
-          >
-            <Text style={{
-              fontSize: 16, fontWeight: '700',
-              color: kcalInput ? getTextOnColor(coach.color) : colors.textDim,
-            }}>
-              {saving ? 'Saving...' : 'Log meal'}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
-
-        {/* ---- Entry list or empty state ---- */}
+        {/* Meal diary */}
         {loading ? (
           <ActivityIndicator size="large" color={coach.color} style={{ marginTop: 32 }} />
-        ) : entries.length === 0 ? (
-          <FadeInView delay={200} style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <View style={{
-              width: 64, height: 64, borderRadius: 32,
-              backgroundColor: colors.glassBg,
-              borderWidth: 1, borderColor: colors.glassBorder,
-              alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-            }}>
-              <Apple size={28} color={colors.textMuted} strokeWidth={1.5} />
-            </View>
-            <Text style={{ ...FONT.subhead, color: colors.textPrimary }}>No meals logged today</Text>
-            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 4 }}>
-              Use the form above to add your first meal
-            </Text>
-          </FadeInView>
         ) : (
-          <FadeInView delay={200}>
-            <Text style={{ ...FONT.label, color: colors.textMuted, marginBottom: 12 }}>
-              Today's meals
-            </Text>
-            <GlassCard>
-              {entries.map((entry, i) => (
-                <View
-                  key={entry.id}
-                  style={{
-                    flexDirection: 'row', alignItems: 'center', paddingVertical: 13,
-                    borderBottomWidth: i < entries.length - 1 ? 1 : 0,
-                    borderBottomColor: colors.glassBorder,
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>
-                      {cap(entry.mealType)}
-                      {entry.items?.length > 0 ? ` — ${entry.items[0].name}` : ''}
-                    </Text>
-                    <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>
-                      {new Date(entry.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      {' · '}{entry.macros.kcal} kcal
-                      {entry.macros.protein > 0 ? ` · ${entry.macros.protein}g P` : ''}
-                      {entry.macros.carbs > 0 ? ` · ${entry.macros.carbs}g C` : ''}
-                      {entry.macros.fat > 0 ? ` · ${entry.macros.fat}g F` : ''}
+          byMeal.map(({ meal, items }, idx) => {
+            const sectionKcal = items.reduce((s, e) => s + (e.macros?.kcal || 0), 0);
+            return (
+              <FadeInView key={meal} delay={130 + idx * 30}>
+                <GlassCard style={{ paddingVertical: 0, paddingHorizontal: 0 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13 }}>
+                    <Text style={{ ...FONT.subhead, color: colors.textPrimary }}>{MEAL_LABELS[meal]}</Text>
+                    <Text style={{ ...FONT.caption, color: colors.textMuted, fontVariant: ['tabular-nums'] }}>
+                      {items.length ? `${sectionKcal} ${energyLabel}` : '—'}
                     </Text>
                   </View>
+
+                  {items.length > 0 && (
+                    <View style={{ borderTopWidth: 1, borderTopColor: colors.glassBorder }}>
+                      {items.map((entry, i) => {
+                        const pending = entry.editState === 'ai_estimated';
+                        const name = entry.items?.map((it) => it.name).join(', ') || cap(entry.mealType);
+                        return (
+                          <TouchableOpacity
+                            key={entry.id}
+                            onPress={() => onEntryPress(entry)}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${name}, ${entry.macros.kcal} ${energyLabel}${pending ? ', pending' : ''}`}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 11,
+                              borderBottomWidth: i < items.length - 1 ? 1 : 0, borderBottomColor: colors.glassBorder,
+                            }}
+                          >
+                            <View style={{ flex: 1, paddingRight: 10 }}>
+                              <Text style={{ fontSize: 13.5, color: colors.textPrimary }} numberOfLines={1}>{name}</Text>
+                              <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>
+                                {new Date(entry.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                                {entry.macros.protein > 0 ? ` · P${entry.macros.protein}` : ''}
+                                {pending ? ' · pending — tap to confirm' : ''}
+                              </Text>
+                            </View>
+                            <Text style={{ fontSize: 13.5, color: pending ? colors.textMuted : colors.textSecondary, fontVariant: ['tabular-nums'] }}>
+                              {entry.macros.kcal}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
                   <TouchableOpacity
-                    onPress={() => handleDelete(entry)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={{ paddingLeft: 12 }}
+                    onPress={() => openSearchFor(meal)}
+                    activeOpacity={0.7}
                     accessibilityRole="button"
-                    accessibilityLabel={`Delete ${entry.mealType} entry`}
+                    accessibilityLabel={`Add to ${MEAL_LABELS[meal]}`}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.glassBorder }}
                   >
-                    <Trash2 size={16} color={colors.textMuted} strokeWidth={1.8} />
+                    <Plus size={14} color={coach.color} strokeWidth={2.6} />
+                    <Text style={{ ...FONT.caption, fontWeight: '600', color: coach.color }}>
+                      Add to {MEAL_LABELS[meal].toLowerCase()}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-              ))}
-            </GlassCard>
-          </FadeInView>
+                </GlassCard>
+              </FadeInView>
+            );
+          })
         )}
 
+        {/* Manual entry — collapsible fallback */}
+        <TouchableOpacity
+          onPress={() => { haptics.tap(); setManualOpen((v) => !v); }}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Enter macros manually"
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 }}
+        >
+          {manualOpen ? <ChevronUp size={14} color={colors.textMuted} strokeWidth={2.2} /> : <ChevronDown size={14} color={colors.textMuted} strokeWidth={2.2} />}
+          <Text style={{ ...FONT.caption, color: colors.textMuted }}>Enter macros manually</Text>
+        </TouchableOpacity>
+
+        {manualOpen && (
+          <GlassCard accentColor={coach.color}>
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+              {MEAL_TYPES.map((mt) => (
+                <TouchableOpacity
+                  key={mt}
+                  style={{
+                    paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.round,
+                    backgroundColor: activeMeal === mt ? coach.color : colors.glassBg,
+                    borderWidth: 1, borderColor: activeMeal === mt ? coach.color : colors.glassBorder,
+                  }}
+                  onPress={() => { haptics.tick(); setActiveMeal(mt); }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: activeMeal === mt ? getTextOnColor(coach.color) : colors.textSecondary }}>
+                    {MEAL_LABELS[mt]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={[inputStyle(colors), { marginBottom: 10 }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Food description (optional)"
+              placeholderTextColor={colors.textDim}
+              maxLength={80}
+            />
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+              <View style={{ flex: 1.4 }}>
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>{energyLabel.toUpperCase()} *</Text>
+                <TextInput style={inputStyle(colors)} value={kcalInput} onChangeText={setKcalInput} keyboardType="numeric" placeholder="450" placeholderTextColor={colors.textDim} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>PROTEIN g</Text>
+                <TextInput style={inputStyle(colors)} value={proteinInput} onChangeText={setProteinInput} keyboardType="decimal-pad" placeholder="30" placeholderTextColor={colors.textDim} />
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>CARBS g</Text>
+                <TextInput style={inputStyle(colors)} value={carbsInput} onChangeText={setCarbsInput} keyboardType="decimal-pad" placeholder="50" placeholderTextColor={colors.textDim} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginBottom: 4 }}>FAT g</Text>
+                <TextInput style={inputStyle(colors)} value={fatInput} onChangeText={setFatInput} keyboardType="decimal-pad" placeholder="15" placeholderTextColor={colors.textDim} onSubmitEditing={handleLog} returnKeyType="done" />
+              </View>
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: kcalInput ? coach.color : colors.bgSubtle, paddingVertical: 14, borderRadius: RADIUS.md, alignItems: 'center' }}
+              onPress={handleLog}
+              disabled={saving || !kcalInput}
+              accessibilityRole="button"
+              accessibilityLabel="Log meal"
+            >
+              <Text style={{ fontSize: 16, fontWeight: '700', color: kcalInput ? getTextOnColor(coach.color) : colors.textDim }}>
+                {saving ? 'Saving…' : `Log to ${MEAL_LABELS[activeMeal].toLowerCase()}`}
+              </Text>
+            </TouchableOpacity>
+          </GlassCard>
+        )}
+
+        {/* Empty-day nudge */}
+        {!loading && entries.length === 0 && (
+          <FadeInView delay={260} style={{ alignItems: 'center', paddingVertical: 24 }}>
+            <Apple size={22} color={colors.textMuted} strokeWidth={1.6} />
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 8 }}>
+              Nothing logged yet — speak it, search it, or scan it.
+            </Text>
+          </FadeInView>
+        )}
       </ScrollView>
 
       <FoodSearchModal
@@ -687,7 +569,7 @@ export default function NutritionScreen({ navigation }) {
         visible={voiceVisible}
         onClose={() => setVoiceVisible(false)}
         onLogged={loadData}
-        mealType={mealType}
+        mealType={activeMeal}
         coachColor={coach.color}
         colors={colors}
         energyLabel={energyLabel}
