@@ -8,6 +8,12 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow SayFit to use the camera to scan food barcodes." }
+      ]
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,11 +21,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sayfit.app",
+      "bundleIdentifier": "com.jackbowker.sayfit",
       "buildNumber": "1",
-      "usesAppleSignIn": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "SayFit does not use the camera.",
+        "NSCameraUsageDescription": "Allow SayFit to use the camera to scan food barcodes.",
         "NSPhotoLibraryUsageDescription": "SayFit does not access your photo library.",
         "NSMicrophoneUsageDescription": "Allow SayFit to use the microphone so you can describe your workout by voice."
       },

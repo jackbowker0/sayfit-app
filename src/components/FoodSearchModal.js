@@ -18,7 +18,7 @@ import { FONT, SPACING, RADIUS, getTextOnColor } from '../constants/theme';
 import { searchFoods, getRecentFoods, macrosForPortion } from '../services/foodDb';
 import * as haptics from '../services/haptics';
 
-export default function FoodSearchModal({ visible, onClose, onPick, coachColor, colors }) {
+export default function FoodSearchModal({ visible, onClose, onPick, coachColor, colors, initialFood = null }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [recents, setRecents] = useState([]);
@@ -27,10 +27,17 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
   const [grams, setGrams] = useState('100');
   const debounceRef = useRef(null);
 
-  // Load recents each time the sheet opens; reset transient state.
+  // Load recents each time the sheet opens; reset transient state. If opened
+  // with an initialFood (e.g. from a barcode scan), jump straight to its portion step.
   useEffect(() => {
     if (!visible) return;
-    setQuery(''); setResults([]); setSelected(null); setGrams('100');
+    setQuery(''); setResults([]);
+    if (initialFood) {
+      setSelected(initialFood);
+      setGrams(initialFood.servingGrams ? String(initialFood.servingGrams) : '100');
+    } else {
+      setSelected(null); setGrams('100');
+    }
     getRecentFoods().then(setRecents).catch(() => setRecents([]));
   }, [visible]);
 

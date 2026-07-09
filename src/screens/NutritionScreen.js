@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import FadeInView from '../components/FadeInView';
 import {
-  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search,
+  UtensilsCrossed, Flame, Beef, Apple, Trash2, Search, ScanBarcode,
 } from 'lucide-react-native';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -29,6 +29,7 @@ import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
 import GlassCard from '../components/GlassCard';
 import FoodSearchModal from '../components/FoodSearchModal';
+import BarcodeScannerModal from '../components/BarcodeScannerModal';
 
 // Capitalise first letter
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -74,19 +75,29 @@ export default function NutritionScreen({ navigation }) {
   const [fatInput, setFatInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [foodSearchVisible, setFoodSearchVisible] = useState(false);
-  const [foodSource, setFoodSource] = useState('manual'); // 'manual' | 'search'
+  const [scanVisible, setScanVisible] = useState(false);
+  const [initialFood, setInitialFood] = useState(null); // seeds the portion step (from a scan)
+  const [foodSource, setFoodSource] = useState('manual'); // 'manual' | 'search' | 'barcode'
 
-  // A food picked from search pre-fills the macro form; the user still reviews
-  // and taps Log, so nothing is auto-logged.
+  // A food picked from search/scan pre-fills the macro form; the user still
+  // reviews and taps Log, so nothing is auto-logged.
   const handleFoodPick = (food, grams, macros) => {
     setDescription(food.brand ? `${food.name} (${food.brand})` : food.name);
     setKcalInput(String(macros.kcal));
     setProteinInput(String(macros.protein));
     setCarbsInput(String(macros.carbs));
     setFatInput(String(macros.fat));
-    setFoodSource('search');
+    setFoodSource(initialFood ? 'barcode' : 'search');
     addRecentFood(food).catch(() => {});
     setFoodSearchVisible(false);
+    setInitialFood(null);
+  };
+
+  // A scanned barcode resolved to a food → hand it to the portion step.
+  const handleScanFound = (food) => {
+    setScanVisible(false);
+    setInitialFood(food);
+    setFoodSearchVisible(true);
   };
 
   // ---- Set-targets form (only visible when targets unset) ----
@@ -409,21 +420,35 @@ export default function NutritionScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Food search — the primary path; manual macro entry stays below as fallback */}
-          <TouchableOpacity
-            onPress={() => { haptics.tap(); setFoodSearchVisible(true); }}
-            activeOpacity={0.8}
-            style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-              paddingVertical: 12, marginBottom: 12, borderRadius: RADIUS.md,
-              borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Search the food database"
-          >
-            <Search size={16} color={coach.color} strokeWidth={2.4} />
-            <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Search food database</Text>
-          </TouchableOpacity>
+          {/* Food search + barcode — the primary path; manual entry stays below as fallback */}
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); setInitialFood(null); setFoodSearchVisible(true); }}
+              activeOpacity={0.8}
+              style={{
+                flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+                paddingVertical: 12, borderRadius: RADIUS.md,
+                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Search the food database"
+            >
+              <Search size={16} color={coach.color} strokeWidth={2.4} />
+              <Text style={{ ...FONT.caption, fontWeight: '700', color: coach.color }}>Search food</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => { haptics.tap(); setScanVisible(true); }}
+              activeOpacity={0.8}
+              style={{
+                width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md,
+                borderWidth: 1, borderColor: coach.color, backgroundColor: coach.color + '14',
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Scan a barcode"
+            >
+              <ScanBarcode size={18} color={coach.color} strokeWidth={2.4} />
+            </TouchableOpacity>
+          </View>
 
           {/* Description (optional) */}
           <TextInput
@@ -580,8 +605,17 @@ export default function NutritionScreen({ navigation }) {
 
       <FoodSearchModal
         visible={foodSearchVisible}
-        onClose={() => setFoodSearchVisible(false)}
+        onClose={() => { setFoodSearchVisible(false); setInitialFood(null); }}
         onPick={handleFoodPick}
+        coachColor={coach.color}
+        colors={colors}
+        initialFood={initialFood}
+      />
+
+      <BarcodeScannerModal
+        visible={scanVisible}
+        onClose={() => setScanVisible(false)}
+        onFound={handleScanFound}
         coachColor={coach.color}
         colors={colors}
       />
