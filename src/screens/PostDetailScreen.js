@@ -23,15 +23,40 @@ import { likePost, unlikePost, getLikedPostIds, getComments, addComment, deleteC
 export default function PostDetailScreen({ navigation, route }) {
   const { user } = useContext(AuthContext);
   const { colors, isDark } = useTheme();
-  const { post } = route.params;
+  // Notifications and deep links pass `postId`, in-app nav passes the full
+  // `post` object. Guard both so a push tap can't crash the whole app on an
+  // undefined `post`.
+  const { post } = route.params || {};
 
   const [comments, setComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
 
   useEffect(() => {
-    loadData();
+    if (post?.id) loadData();
+    else setLoadingComments(false);
   }, []);
+
+  if (!post) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, padding: SPACING.lg }}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <ChevronLeft size={22} color={colors.textSecondary} strokeWidth={2} />
+          <Text style={{ ...FONT.caption, color: colors.textSecondary }}>Back</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.lg }}>
+          <Text style={{ ...FONT.body, color: colors.textMuted, textAlign: 'center' }}>
+            This post isn't available.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const loadData = async () => {
     try {

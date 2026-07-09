@@ -33,7 +33,11 @@ function sanitizeMacros(m = {}) {
 }
 
 function dayKey(dateIso) {
-  return new Date(dateIso).toISOString().split('T')[0]; // YYYY-MM-DD
+  // LOCAL-timezone day key (NOT UTC) — matches protocol.js so an evening meal
+  // isn't tagged tomorrow and daily totals reset at LOCAL midnight, not UTC.
+  const d = dateIso ? new Date(dateIso) : new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function counts(entry) {

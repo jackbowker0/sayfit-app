@@ -121,10 +121,10 @@ export default function ProtocolScreen({ navigation }) {
       site: doseSite,
     });
     if (entry) await confirmDose(entry.id);   // user typed + confirmed in one action
+    // Analytics must NOT carry health data. Send only a coarse category +
+    // booleans — never the compound name, dose amount, unit, or route.
     capture('protocol_dose_logged', {
-      compound_name: compound ? compound.name : 'custom',
       type: compound ? compound.type : 'other',
-      amount: amt, unit: doseUnit, route: compound ? compound.route : 'other',
       has_site: !!doseSite,
     });
     setDoseAmount(''); setDoseSite(null);

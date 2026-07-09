@@ -8,7 +8,7 @@ import {
   TextInput, Alert, ActivityIndicator, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Sun, Moon, Smartphone, ChevronLeft, User, Dumbbell, Calendar, Timer, Scale, Bell, Volume2 } from 'lucide-react-native';
+import { Sun, Moon, Smartphone, ChevronLeft, User, Dumbbell, Calendar, Timer, Scale, Bell, Volume2, Download } from 'lucide-react-native';
 import FadeInView from '../components/FadeInView';
 
 import { useWorkoutContext } from '../context/WorkoutContext';
@@ -19,6 +19,7 @@ import { useTheme } from '../hooks/useTheme';
 import { getUserProfile, saveUserProfile, resetOnboarding, GOAL_OPTIONS, EQUIPMENT_OPTIONS, FITNESS_LEVELS, DAY_OPTIONS } from '../services/userProfile';
 import { clearWorkoutHistory } from '../services/storage';
 import { clearAchievements, getAchievementStats } from '../services/achievements';
+import { exportAllData } from '../services/dataExport';
 import { scheduleWorkoutReminders } from '../services/localNotifications';
 import * as haptics from '../services/haptics';
 import * as tts from '../services/tts';
@@ -58,6 +59,16 @@ export default function SettingsScreen({ navigation }) {
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [achieveStats, setAchieveStats] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (exporting) return;
+    haptics.tap();
+    setExporting(true);
+    const res = await exportAllData();
+    setExporting(false);
+    if (!res.ok) Alert.alert('Export failed', res.error || 'Could not export your data.');
+  };
 
   useEffect(() => { loadProfile(); loadAchievementStats(); tts.isEnabled().then(setTtsEnabled); }, []);
 
@@ -441,6 +452,31 @@ export default function SettingsScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </View>
+          </GlassCard>
+        </FadeInView>
+
+        {/* YOUR DATA */}
+        <FadeInView delay={380}>
+          <Text style={[ds.sectionTitle, FONT.label, { color: colors.textMuted }]}>Your Data</Text>
+          <GlassCard>
+            <TouchableOpacity
+              style={{ paddingVertical: SPACING.sm, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              onPress={handleExport}
+              disabled={exporting}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Export my data"
+            >
+              {exporting
+                ? <ActivityIndicator size="small" color={coach.color} />
+                : <Download size={18} color={coach.color} strokeWidth={2.2} />}
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textPrimary }}>Export My Data</Text>
+                <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                  Save a JSON backup of every workout, meal, weigh-in, and protocol log
+                </Text>
+              </View>
+            </TouchableOpacity>
           </GlassCard>
         </FadeInView>
 

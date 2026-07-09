@@ -10,7 +10,6 @@ import {
 import Svg, { Polyline, Circle, Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import FadeInView from '../components/FadeInView';
 import {
   Scale, ChevronLeft, TrendingUp, TrendingDown,
@@ -21,11 +20,10 @@ import { COACHES } from '../constants/coaches';
 import { SPACING, RADIUS, FONT, GLOW, getTextOnColor } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { getUserProfile } from '../services/userProfile';
+import { getWeightEntries, saveWeight, migrateLegacyWeightLog } from '../services/bodyWeight';
 import { checkActionAchievement } from '../services/achievements';
 import * as haptics from '../services/haptics';
 import GlassCard from '../components/GlassCard';
-
-const WEIGHT_KEY = 'sayfit_weight_log';
 
 export default function WeightScreen({ navigation }) {
   const { coachId } = useWorkoutContext();
@@ -44,11 +42,12 @@ export default function WeightScreen({ navigation }) {
 
   const loadData = async () => {
     setLoading(true);
-    try {
-      const raw = await AsyncStorage.getItem(WEIGHT_KEY);
-      const data = raw ? JSON.parse(raw) : [];
-      setEntries(data.sort((a, b) => new Date(a.date) - new Date(b.date)));
-    } catch (e) { setEntries([]); }
+    // Merge any legacy split-brain store, then read the single source of truth.
+    // getWeightEntries never throws (returns [] on error), so a read failure
+    // can no longer blank the in-memory list and get it re-saved as empty.
+    await migrateLegacyWeightLog();
+    const data = await getWeightEntries();
+    setEntries([...data].sort((a, b) => new Date(a.date) - new Date(b.date)));
     const profile = await getUserProfile();
     if (profile.units) setUnits(profile.units);
     setLoading(false);
@@ -61,10 +60,11 @@ export default function WeightScreen({ navigation }) {
       return;
     }
     haptics.success();
-    const entry = { weight: val, date: new Date().toISOString(), id: Date.now().toString() };
-    const updated = [...entries, entry];
-    await AsyncStorage.setItem(WEIGHT_KEY, JSON.stringify(updated));
-    setEntries(updated);
+    // Write through the service (read-modify-write against storage), then read
+    // back — never persist from possibly-stale React state.
+    await saveWeight(val);
+    const data = await getWeightEntries();
+    setEntries([...data].sort((a, b) => new Date(a.date) - new Date(b.date)));
     setInput('');
     // Achievement: logged body weight
     checkActionAchievement('weight_logged');

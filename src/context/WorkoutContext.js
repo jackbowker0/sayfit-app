@@ -8,8 +8,9 @@
 //   const { workout, coach, setCoach, generatedWorkout, setGeneratedWorkout } = useWorkoutContext();
 // ============================================================
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useWorkout } from '../hooks/useWorkout';
+import { getUserProfile } from '../services/userProfile';
 
 const WorkoutContext = createContext(null);
 
@@ -17,6 +18,15 @@ export function WorkoutProvider({ children }) {
   const [coachId, setCoachId] = useState('hype');
   const [generatedWorkout, setGeneratedWorkout] = useState(null);
   const workout = useWorkout();
+
+  // Rehydrate the chosen coach from the saved profile on launch. Without this,
+  // coachId silently resets to the default every cold start — and then a
+  // Settings "Save" would persist that default back over the user's real pick.
+  useEffect(() => {
+    getUserProfile()
+      .then((p) => { if (p && p.coachId) setCoachId(p.coachId); })
+      .catch(() => {});
+  }, []);
 
   const value = {
     // Coach selection

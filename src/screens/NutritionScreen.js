@@ -129,13 +129,11 @@ export default function NutritionScreen({ navigation }) {
       items,
       macros: { kcal, protein, carbs, fat },
     });
+    // Analytics must NOT carry the actual macro values (dietary health data).
+    // Keep only the meal type + whether a description was added.
     capture('meal_logged', {
       source: 'manual',
       mealType,
-      kcal,
-      protein,
-      carbs,
-      fat,
       hasDescription: items.length > 0,
     });
     // Reset form

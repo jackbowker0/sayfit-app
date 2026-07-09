@@ -8,6 +8,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WEIGHT_KEY = 'sayfit_body_weight';
+// Old WeightScreen wrote to this separate key, creating a split-brain where
+// weigh-ins landed in one of two disjoint histories. Drained once on load.
+const LEGACY_WEIGHT_KEY = 'sayfit_weight_log';
+
+// LOCAL-timezone day key (NOT UTC) — matches protocol.js / nutrition.js so a
+// morning weigh-in can't overwrite last night's under a shifted UTC date.
+function localDayKey(dateIso) {
+  const d = dateIso ? new Date(dateIso) : new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 // ---- READ / WRITE ----
 
@@ -29,12 +40,10 @@ export async function saveWeight(weight, date = null) {
   try {
     const entries = await getWeightEntries();
     const entryDate = date || new Date().toISOString();
-    const dayKey = new Date(entryDate).toISOString().split('T')[0]; // YYYY-MM-DD
+    const key = localDayKey(entryDate);
 
-    // Check if entry exists for this day
-    const existingIdx = entries.findIndex(e =>
-      new Date(e.date).toISOString().split('T')[0] === dayKey
-    );
+    // Check if an entry exists for this LOCAL day (one weigh-in per day).
+    const existingIdx = entries.findIndex(e => localDayKey(e.date) === key);
 
     const entry = {
       id: Date.now().toString(),
@@ -72,6 +81,48 @@ export async function deleteWeightEntry(entryId) {
 
 export async function clearWeightHistory() {
   await AsyncStorage.setItem(WEIGHT_KEY, '[]');
+}
+
+/**
+ * One-time merge of the legacy 'sayfit_weight_log' store (written by an older
+ * WeightScreen under a different key) into this canonical store. Fixes the
+ * split-brain where weigh-ins landed in one of two disjoint histories. Safe to
+ * call repeatedly — it removes the legacy key once drained, so it no-ops after.
+ * Never deletes canonical data: a legacy entry is skipped if that local day
+ * already has a canonical entry.
+ */
+export async function migrateLegacyWeightLog() {
+  try {
+    const rawLegacy = await AsyncStorage.getItem(LEGACY_WEIGHT_KEY);
+    if (!rawLegacy) return false;
+
+    let legacy = null;
+    try { legacy = JSON.parse(rawLegacy); } catch (_) { legacy = null; }
+    if (!Array.isArray(legacy) || legacy.length === 0) {
+      await AsyncStorage.removeItem(LEGACY_WEIGHT_KEY);
+      return false;
+    }
+
+    const entries = await getWeightEntries();
+    const seenDays = new Set(entries.map(e => localDayKey(e.date)));
+    let added = 0;
+    for (const e of legacy) {
+      if (!e || e.weight == null || !e.date) continue;
+      const k = localDayKey(e.date);
+      if (seenDays.has(k)) continue; // keep the canonical entry for that day
+      entries.push({ id: e.id ? String(e.id) : `legacy-${k}`, date: e.date, weight: parseFloat(e.weight) });
+      seenDays.add(k);
+      added++;
+    }
+
+    entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    await AsyncStorage.setItem(WEIGHT_KEY, JSON.stringify(entries));
+    await AsyncStorage.removeItem(LEGACY_WEIGHT_KEY); // drained — won't merge twice
+    return added > 0;
+  } catch (e) {
+    console.warn('[BodyWeight] Legacy migration failed:', e);
+    return false;
+  }
 }
 
 // ---- STATS ----

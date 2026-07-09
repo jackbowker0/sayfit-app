@@ -392,6 +392,14 @@ verify_jwt = true
 import_map = "./functions/coach/deno.json"
 entrypoint = "./functions/coach/index.ts"
 
+# workout-gen had NO config block, so it was callable without a JWT — an open
+# proxy to the Anthropic key. Require a JWT like coach. (Needs `supabase
+# functions deploy workout-gen` to take effect; rate-limiting still TODO.)
+[functions.workout-gen]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/workout-gen/index.ts"
+
 [functions.refresh-leaderboard]
 enabled = true
 verify_jwt = false

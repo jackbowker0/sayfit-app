@@ -25,7 +25,11 @@ export function getPostHogClient() {
     return null;
   }
 
-  client = new PostHog(apiKey, { host,enableSessionReplay: true });
+  // Session replay is intentionally OFF: this app surfaces medication doses,
+  // injection sites, and macros on-screen, and replay would capture that
+  // sensitive health data into analytics. Do not re-enable without masking
+  // the Protocol and Nutrition screens.
+  client = new PostHog(apiKey, { host });
   return client;
 }
 
