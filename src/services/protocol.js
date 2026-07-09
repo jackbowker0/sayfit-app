@@ -13,6 +13,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeReadArray, safeWriteArray } from './safeStore';
+import { SEED_PERSONAL_PROTOCOL } from '../config/features';
 
 // ---- KEYS ----
 const PROTOCOL_COMPOUNDS_KEY = 'sayfit_protocol_compounds';
@@ -137,6 +138,9 @@ export async function getCompounds() {
   try {
     const raw = await AsyncStorage.getItem(PROTOCOL_COMPOUNDS_KEY);
     if (raw == null) {
+      // Public builds start empty — the user adds their own compounds. Only a
+      // personal dogfood build seeds a starter protocol (see config/features).
+      if (!SEED_PERSONAL_PROTOCOL) return [];
       const seed = getDefaultCompounds();
       // Persist in its own try so a write failure still returns the seed (never []).
       try { await AsyncStorage.setItem(PROTOCOL_COMPOUNDS_KEY, JSON.stringify(seed)); }
@@ -295,6 +299,8 @@ export async function getSupplementStack() {
   try {
     const raw = await AsyncStorage.getItem(PROTOCOL_STACK_KEY);
     if (raw == null) {
+      // Public builds start empty; only a personal dogfood build seeds a stack.
+      if (!SEED_PERSONAL_PROTOCOL) return [];
       const seed = getDefaultStack();
       try { await AsyncStorage.setItem(PROTOCOL_STACK_KEY, JSON.stringify(seed)); }
       catch (e) { console.warn('[Protocol] Failed to persist seed stack:', e); }
