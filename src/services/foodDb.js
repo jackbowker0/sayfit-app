@@ -278,8 +278,10 @@ export async function getFoodPortions(food) {
     }
   }
   if (food?.servingGrams) push(food.servingLabel || '1 serving', food.servingGrams);
+  // Standard weight units always available (MFP-style unit switching).
+  push('1 oz', 28.35);
   push('100 g', 100);
-  return portions.slice(0, 8);
+  return portions.slice(0, 10);
 }
 
 // ---- CACHE (barcode -> food) ----
@@ -317,6 +319,11 @@ export async function addRecentFood(food) {
   const recents = await getRecentFoods();
   const deduped = [food, ...recents.filter((f) => f.id !== food.id)].slice(0, RECENTS_MAX);
   await safeWriteArray(RECENTS_KEY, deduped);
+}
+
+/** Wipe the recent-foods list (user-initiated from the search sheet). */
+export async function clearRecentFoods() {
+  await AsyncStorage.setItem(RECENTS_KEY, '[]');
 }
 
 // ---- VOICE / PARSED-ITEM RESOLUTION ----

@@ -17,12 +17,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, X, ChevronLeft, CheckCircle2 } from 'lucide-react-native';
 
 import { FONT, SPACING, RADIUS, getTextOnColor } from '../constants/theme';
-import { searchFoods, getRecentFoods, macrosForPortion, getFoodPortions } from '../services/foodDb';
+import { searchFoods, getRecentFoods, clearRecentFoods, macrosForPortion, getFoodPortions } from '../services/foodDb';
+import { correctFoodQuery } from '../services/ai';
 import { MEAL_TYPES } from '../services/nutrition';
 import * as haptics from '../services/haptics';
 
-const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
 const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
+
+// Servings = whole number + fraction, the MFP picker model.
+const FRACTIONS = [
+  { label: '0', value: 0 },
+  { label: '⅛', value: 1 / 8 },
+  { label: '¼', value: 1 / 4 },
+  { label: '⅓', value: 1 / 3 },
+  { label: '½', value: 1 / 2 },
+  { label: '⅔', value: 2 / 3 },
+  { label: '¾', value: 3 / 4 },
+];
 
 // The serving a person most likely means — "1 medium", "1 large", a standard
 // serving — beats "1 cup (4.86 large eggs)" as the pre-selected default.
@@ -49,10 +60,13 @@ export default function FoodSearchModal({
   const [portions, setPortions] = useState([]);         // [{label, grams}]
   const [portionsLoading, setPortionsLoading] = useState(false);
   const [portionIdx, setPortionIdx] = useState(0);
-  const [qty, setQty] = useState(1);                    // servings count (0.5 steps)
+  const [qtyWhole, setQtyWhole] = useState(1);          // servings: whole part
+  const [qtyFracIdx, setQtyFracIdx] = useState(0);      // servings: fraction part (index into FRACTIONS)
   const [customGrams, setCustomGrams] = useState(null); // string once the user types grams
   const [meal, setMeal] = useState(initialMeal);        // which diary section this lands in
+  const [correctedTo, setCorrectedTo] = useState(null); // "did you mean" note after a typo fix
   const debounceRef = useRef(null);
+  const correctionCache = useRef(new Map());            // query -> corrected|null, avoids repeat AI calls
 
   // Load recents each time the sheet opens; reset transient state. If opened
   // with an initialFood (e.g. from a barcode scan), jump straight to portioning.
@@ -66,14 +80,25 @@ export default function FoodSearchModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // Debounced search on query change.
+  // Debounced search on query change; a zero-result query gets one shot at
+  // AI spell-correction ("mcdonslds" -> "mcdonalds") with a did-you-mean note.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const q = query.trim();
+    setCorrectedTo(null);
     if (q.length < 2) { setResults([]); setSearching(false); return; }
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
-      const r = await searchFoods(q, { limit: 25 });
+      let r = await searchFoods(q, { limit: 25 });
+      if (r.length === 0 && q.length >= 4) {
+        const cache = correctionCache.current;
+        const corrected = cache.has(q) ? cache.get(q) : await correctFoodQuery(q).catch(() => null);
+        cache.set(q, corrected);
+        if (corrected) {
+          const rc = await searchFoods(corrected, { limit: 25 });
+          if (rc.length > 0) { r = rc; setCorrectedTo(corrected); }
+        }
+      }
       setResults(r);
       setSearching(false);
     }, 350);
@@ -82,7 +107,8 @@ export default function FoodSearchModal({
 
   const beginPortioning = useCallback(async (food) => {
     setSelected(food);
-    setQty(1);
+    setQtyWhole(1);
+    setQtyFracIdx(0);
     setCustomGrams(null);
     setPortionIdx(0);
     setPortions(food.servingGrams ? [{ label: food.servingLabel || '1 serving', grams: food.servingGrams }, { label: '100 g', grams: 100 }] : [{ label: '100 g', grams: 100 }]);
@@ -102,7 +128,9 @@ export default function FoodSearchModal({
 
   // Effective grams: custom text wins; otherwise selected serving × quantity.
   const portion = portions[portionIdx] || { label: '100 g', grams: 100 };
+  const qty = qtyWhole + FRACTIONS[qtyFracIdx].value;
   const grams = customGrams != null ? (parseFloat(customGrams) || 0) : Math.round(portion.grams * qty);
+  const qtyText = `${qtyWhole > 0 || qtyFracIdx === 0 ? qtyWhole : ''}${qtyFracIdx > 0 ? ` ${FRACTIONS[qtyFracIdx].label}` : ''}`.trim();
 
   const confirm = () => {
     if (!selected || !grams || grams <= 0) return;
@@ -113,7 +141,7 @@ export default function FoodSearchModal({
   const bumpQty = (delta) => {
     haptics.tick();
     setCustomGrams(null);
-    setQty((q) => Math.min(20, Math.max(0.5, round1(q + delta))));
+    setQtyWhole((w) => Math.min(50, Math.max(0, w + delta)));
   };
 
   const listData = query.trim().length < 2 ? recents : results;
@@ -203,14 +231,14 @@ export default function FoodSearchModal({
                 })}
               </View>
 
-              {/* Number of servings + custom grams */}
+              {/* Number of servings: whole ± stepper + fraction chips + custom grams */}
               <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 22, marginBottom: 8 }}>Number of servings</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <QtyBtn label="−" onPress={() => bumpQty(-0.5)} colors={colors} />
-                <Text style={{ ...FONT.stat, fontSize: 24, color: colors.textPrimary, minWidth: 52, textAlign: 'center', fontVariant: ['tabular-nums'] }}>
-                  {customGrams != null ? '—' : qty}
+                <QtyBtn label="−" onPress={() => bumpQty(-1)} colors={colors} />
+                <Text style={{ ...FONT.stat, fontSize: 24, color: colors.textPrimary, minWidth: 64, textAlign: 'center', fontVariant: ['tabular-nums'] }}>
+                  {customGrams != null ? '—' : qtyText}
                 </Text>
-                <QtyBtn label="+" onPress={() => bumpQty(0.5)} colors={colors} />
+                <QtyBtn label="+" onPress={() => bumpQty(1)} colors={colors} />
                 <View style={{ flex: 1 }} />
                 <TextInput
                   value={customGrams != null ? customGrams : String(grams)}
@@ -227,6 +255,29 @@ export default function FoodSearchModal({
                   }}
                 />
                 <Text style={{ ...FONT.caption, color: colors.textMuted }}>g</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 10 }}>
+                {FRACTIONS.map((f, i) => {
+                  const active = customGrams == null && i === qtyFracIdx;
+                  return (
+                    <TouchableOpacity
+                      key={f.label}
+                      onPress={() => { haptics.tick(); setCustomGrams(null); setQtyFracIdx(i); }}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={f.value === 0 ? 'No fraction' : `plus ${f.label} serving`}
+                      style={{
+                        flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: RADIUS.sm,
+                        backgroundColor: active ? coachColor : colors.glassBg,
+                        borderWidth: 1, borderColor: active ? coachColor : colors.glassBorder,
+                      }}
+                    >
+                      <Text style={{ ...FONT.caption, fontSize: 13, color: active ? getTextOnColor(coachColor) : colors.textSecondary }}>
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {/* Meal */}
@@ -305,7 +356,22 @@ export default function FoodSearchModal({
           </View>
 
           {showingRecents && recents.length > 0 && (
-            <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 16 }}>Recent</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+              <Text style={{ ...FONT.label, color: colors.textMuted }}>Recent</Text>
+              <TouchableOpacity
+                onPress={async () => { haptics.tap(); await clearRecentFoods(); setRecents([]); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button" accessibilityLabel="Clear recent foods"
+              >
+                <Text style={{ ...FONT.caption, fontSize: 12, color: colors.textMuted }}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {correctedTo && (
+            <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 10 }}>
+              Showing results for <Text style={{ color: coachColor, fontWeight: '600' }}>{correctedTo}</Text>
+            </Text>
           )}
 
           <FlatList

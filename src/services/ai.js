@@ -518,6 +518,36 @@ JSON:`;
 }
 
 /**
+ * Spell-correct a food/brand search that returned nothing ("mcdonslds" ->
+ * "mcdonalds"). Returns the corrected query, or null when the AI is
+ * unavailable / the term was already fine. Cheap (few tokens), called only
+ * on the zero-results path.
+ */
+export async function correctFoodQuery(text) {
+  const t = (text || '').trim();
+  if (t.length < 3 || !isAIAvailable()) return null;
+
+  const prompt = `A food-database search for "${t.replace(/"/g, "'")}" returned no results. If it looks like a misspelled food or restaurant/brand name, return ONLY the corrected search term, nothing else. If it is not recognizable as a food, brand, or restaurant, return ONLY the word NONE.`;
+
+  try {
+    const res = await fetch(COACH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ prompt, max_tokens: 20 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const corrected = (data.text || '').trim().replace(/^["']|["'.]$/g, '');
+    if (!corrected || /^none$/i.test(corrected) || corrected.length > 60) return null;
+    if (corrected.toLowerCase() === t.toLowerCase()) return null;
+    return corrected;
+  } catch (e) {
+    console.warn('[AI] correctFoodQuery failed:', e.message);
+    return null;
+  }
+}
+
+/**
  * Check if the AI service is available (proxy configured)
  */
 export function isAIAvailable() {
