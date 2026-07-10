@@ -61,10 +61,19 @@ async function timedFetch(url, opts = {}) {
 }
 
 const offFetch = (url) => timedFetch(url, { headers: { 'User-Agent': OFF_UA } });
-const usdaFetch = (path) => {
+const usdaFetch = async (path) => {
   const sep = path.includes('?') ? '&' : '?';
-  return timedFetch(`${USDA_BASE}${path}${sep}api_key=${USDA_KEY}`);
+  const url = `${USDA_BASE}${path}${sep}api_key=${USDA_KEY}`;
+  const first = await timedFetch(url);
+  if (first) return first;
+  // api.data.gov intermittently 400s a URL it accepts moments later — one
+  // cheap retry keeps a flake from dumping search to the weak OFF fallback.
+  await new Promise((r) => setTimeout(r, 700));
+  return timedFetch(url);
 };
+
+// encodeURIComponent leaves ( ) alone; the FDC gateway is picky about them.
+const encodeParam = (s) => encodeURIComponent(s).replace(/\(/g, '%28').replace(/\)/g, '%29');
 
 /** True when a USDA key is configured (not the throttled shared demo key). */
 export function hasUsdaKey() {
@@ -131,9 +140,12 @@ export function normalizeUSDA(f) {
     servingLabel: (f.householdServingFullText || '').trim()
       || (f.servingSize ? `${f.servingSize} ${f.servingSizeUnit || ''}`.trim() : null),
     source: 'usda',
-    // Foundation/SR Legacy = lab-standardized data. Shown as "Verified" in the
-    // UI (the MFP-checkmark trust signal) and ranked ahead of branded.
-    verified: f.dataType === 'Foundation' || f.dataType === 'SR Legacy',
+    // Foundation/SR Legacy = lab-standardized; FNDDS = USDA survey-computed
+    // (restaurant/prepared foods). Both show the "Verified" trust check and
+    // rank ahead of crowd-sourced branded data (SR/Foundation highest).
+    verified: f.dataType === 'Foundation' || f.dataType === 'SR Legacy' || f.dataType === 'Survey (FNDDS)',
+    _tier: (f.dataType === 'Foundation' || f.dataType === 'SR Legacy') ? 10
+      : f.dataType === 'Survey (FNDDS)' ? 8 : 0,
   };
 }
 
@@ -157,35 +169,53 @@ export function macrosForPortion(food, grams) {
 // default slot (they inflate calories 3-4x, the source of bogus totals).
 const VARIANT = /(white|substitute|powder|dried|dehydrated|imitation|infant|baby food|concentrate|drink mix|non-?dairy|meatless)/i;
 
-function scoreMatch(nameLower, query, generic) {
-  const q = (query || '').toLowerCase().trim();
-  const words = q.split(/\s+/).filter(Boolean);
-  // Generic (USDA Foundation/SR Legacy) has accurate, standardized per-100g
-  // data; branded is crowd-sourced and unreliable for generic terms. So generic
-  // dominates whenever it exists (brand-name searches have no generic match, so
-  // branded still surfaces there).
-  let s = generic ? 10 : 0;
-  if (nameLower === q || nameLower.startsWith(q + ',') || nameLower.startsWith(q + ' ')) s += 4;
-  else if (words[0] && nameLower.startsWith(words[0])) s += 2;
-  if (words.length && words.every((w) => nameLower.includes(w))) s += 1;
-  s -= nameLower.length / 40;                                   // concise beats qualifier-laden
-  if (VARIANT.test(nameLower) && !VARIANT.test(q)) s -= 3;      // don't default to a variant
-  if (/\b(whole|raw)\b/.test(nameLower)) s += 0.6;             // prefer the plain base form
+// Punctuation-blind normalization: "McDONALD'S," and "mcdonalds" must match.
+const normText = (s) => (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+// A word matches if the haystack has it or its singular ("eggs" -> "egg").
+const wordIn = (hay, w) => hay.includes(w) || (w.endsWith('s') && hay.includes(w.slice(0, -1)));
+
+function scoreMatch(name, brand, query, tier) {
+  const q = normText(query);
+  const nameN = normText(name);
+  const hay = brand ? `${nameN} ${normText(brand)}` : nameN;
+  const words = q.split(' ').filter(Boolean);
+  // Data-quality tier: Foundation/SR Legacy (10) > FNDDS survey (8) > branded
+  // (0, crowd-sourced). Keeps junk branded data out of the default slot.
+  let s = tier || 0;
+  if (nameN === q || nameN.startsWith(q + ' ')) s += 4;
+  else if (words[0] && nameN.startsWith(words[0])) s += 2;
+  // Matching ALL the words the user typed is decisive — "mcdonalds fries"
+  // must beat every other McDonald's item, and "quest protein bar" (all
+  // words, branded) must beat a generic that only matches "protein bar".
+  // The bonus outweighs the tier gap on purpose; plural-aware wordIn means
+  // a generic that truly matches ("eggs"->"egg") gets it too and its tier
+  // still decides against exact-named branded junk.
+  const hits = words.filter((w) => wordIn(hay, w)).length;
+  s += (words.length && hits === words.length) ? 14 : hits;
+  s -= nameN.length / 60;                                   // gentle concise-name tiebreak
+  if (VARIANT.test(nameN) && !VARIANT.test(q)) s -= 3;      // don't default to a variant
+  if (/\b(whole|raw)\b/.test(nameN)) s += 0.6;             // prefer the plain base form
   return s;
 }
 
 async function searchUSDA(query, limit) {
-  const data = await usdaFetch(
-    `/foods/search?query=${encodeURIComponent(query)}&pageSize=${limit}`
-    + `&dataType=${encodeURIComponent('Foundation,SR Legacy,Branded')}`,
-  );
-  if (!data) return null; // null = source unavailable (distinct from "no matches")
-  const foods = (data.foods || []).map(normalizeUSDA).filter(Boolean);
+  // TWO queries, generic and branded separately. A single mixed query lets
+  // exact-named branded products fill the whole page ("ground beef" returned
+  // 25/25 Branded — the accurate generic entries never reached the scorer).
+  const url = (types, size) =>
+    `/foods/search?query=${encodeURIComponent(query)}&pageSize=${size}&dataType=${encodeParam(types)}`;
+  const [gen, brand] = await Promise.all([
+    usdaFetch(url('Foundation,SR Legacy,Survey (FNDDS)', Math.max(10, Math.ceil(limit / 2)))),
+    usdaFetch(url('Branded', limit)),
+  ]);
+  if (!gen && !brand) return null; // source unavailable (distinct from "no matches")
+  const foods = [...(gen?.foods || []), ...(brand?.foods || [])].map(normalizeUSDA).filter(Boolean);
   // Rank by match score so the accurate, plain, generic food is the default.
   return foods
-    .map((f, i) => ({ f, i, score: scoreMatch(f.name.toLowerCase(), query, f.verified) }))
+    .map((f, i) => ({ f, i, score: scoreMatch(f.name, f.brand, query, f._tier) }))
     .sort((a, b) => (b.score - a.score) || (a.i - b.i))
-    .map(({ f }) => f);
+    .slice(0, limit)
+    .map(({ f }) => { const { _tier, ...rest } = f; return rest; });
 }
 
 async function searchOFF(query, limit) {
