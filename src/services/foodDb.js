@@ -128,10 +128,12 @@ export function normalizeUSDA(f) {
       fat: macro(/^total lipid \(fat\)/i),
     },
     servingGrams: (unit === 'g' || unit === 'ml') && Number(f.servingSize) > 0 ? Number(f.servingSize) : null,
-    servingLabel: f.servingSize ? `${f.servingSize} ${f.servingSizeUnit || ''}`.trim() : null,
+    servingLabel: (f.householdServingFullText || '').trim()
+      || (f.servingSize ? `${f.servingSize} ${f.servingSizeUnit || ''}`.trim() : null),
     source: 'usda',
-    // Rank generic whole foods (Foundation/SR Legacy) ahead of branded.
-    _generic: f.dataType === 'Foundation' || f.dataType === 'SR Legacy',
+    // Foundation/SR Legacy = lab-standardized data. Shown as "Verified" in the
+    // UI (the MFP-checkmark trust signal) and ranked ahead of branded.
+    verified: f.dataType === 'Foundation' || f.dataType === 'SR Legacy',
   };
 }
 
@@ -181,9 +183,9 @@ async function searchUSDA(query, limit) {
   const foods = (data.foods || []).map(normalizeUSDA).filter(Boolean);
   // Rank by match score so the accurate, plain, generic food is the default.
   return foods
-    .map((f, i) => ({ f, i, score: scoreMatch(f.name.toLowerCase(), query, f._generic) }))
+    .map((f, i) => ({ f, i, score: scoreMatch(f.name.toLowerCase(), query, f.verified) }))
     .sort((a, b) => (b.score - a.score) || (a.i - b.i))
-    .map(({ f }) => { const { _generic, ...rest } = f; return rest; });
+    .map(({ f }) => f);
 }
 
 async function searchOFF(query, limit) {
@@ -233,6 +235,51 @@ export async function lookupBarcode(code) {
 
   if (food) await cacheBarcode(barcode, food);
   return food;
+}
+
+// ---- PORTIONS (household measures for the portion picker) ----
+
+/**
+ * Household serving options for a food — "1 large (50g)", "1 cup, chopped
+ * (135g)" — the thing that makes MFP's search feel certain. USDA generic
+ * foods carry real lab-weighed measures on the detail endpoint (1 extra
+ * call, made only when a food is picked). Always ends with "100 g".
+ * Returns [{ label, grams }].
+ */
+export async function getFoodPortions(food) {
+  const portions = [];
+  const seen = new Set();
+  const push = (label, grams) => {
+    const g = Math.round(Number(grams));
+    const l = (label || '').trim();
+    if (!l || !Number.isFinite(g) || g <= 0 || g > 5000) return;
+    const key = l.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    portions.push({ label: l, grams: g });
+  };
+
+  if (food?.source === 'usda' && /^usda-\d+$/.test(food.id || '')) {
+    // Full detail only — the trimmed variants of this endpoint drop portions.
+    const data = await usdaFetch(`/food/${food.id.slice(5)}`);
+    for (const p of data?.foodPortions || []) {
+      const unit = p.measureUnit?.name && p.measureUnit.name !== 'undetermined' ? p.measureUnit.name : '';
+      let label = (p.portionDescription && !/quantity not specified/i.test(p.portionDescription))
+        ? p.portionDescription
+        : [p.amount, unit, p.modifier].filter(Boolean).join(' ');
+      label = label.replace(/NLEA serving/i, 'standard serving');
+      push(label, p.gramWeight);
+    }
+    if (data?.householdServingFullText) {
+      const unit = (data.servingSizeUnit || '').toLowerCase();
+      if ((unit === 'g' || unit === 'ml') && Number(data.servingSize) > 0) {
+        push(data.householdServingFullText, data.servingSize);
+      }
+    }
+  }
+  if (food?.servingGrams) push(food.servingLabel || '1 serving', food.servingGrams);
+  push('100 g', 100);
+  return portions.slice(0, 8);
 }
 
 // ---- CACHE (barcode -> food) ----

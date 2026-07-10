@@ -10,7 +10,7 @@
 // (pre-rebuild) or offline AI: type the meal instead.
 // ============================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, FlatList, Modal, ActivityIndicator,
 } from 'react-native';
@@ -53,7 +53,7 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
     if (visible) {
       setPhase('capture'); setTranscript(''); setItems([]); setError(null); setSwapId(null);
       setMeal(mealType);
-      startListening();
+      startListening(''); // fresh open — no base text (state reset hasn't applied yet)
     } else {
       stopListening();
     }
@@ -61,22 +61,35 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  // Each recognition session reports its own cumulative transcript; keep what
+  // was said in earlier sessions so pausing + resuming the mic appends.
+  const sessionBaseRef = useRef('');
   useSpeechEvent('result', (e) => {
     const t = e?.results?.[0]?.transcript;
-    if (typeof t === 'string') setTranscript(t);
+    if (typeof t !== 'string') return;
+    const base = sessionBaseRef.current;
+    setTranscript(base ? `${base} ${t}`.replace(/\s+/g, ' ') : t);
   });
   useSpeechEvent('end', () => setListening(false));
 
-  const startListening = async () => {
+  const startListening = async (base) => {
     if (!SpeechModule) return;
     try {
       const perm = await SpeechModule.requestPermissionsAsync();
       if (!perm.granted) { setListening(false); return; }
+      sessionBaseRef.current = typeof base === 'string' ? base : (transcript || '').trim();
       setListening(true);
-      SpeechModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+      // continuous — otherwise iOS stops at the first pause and anything
+      // said after a moment of thinking is silently dropped.
+      SpeechModule.start({ lang: 'en-US', interimResults: true, continuous: true });
     } catch (_) { setListening(false); }
   };
   const stopListening = () => { try { SpeechModule?.stop?.(); } catch (_) {} setListening(false); };
+  const toggleListening = () => {
+    haptics.tap();
+    if (listening) stopListening();
+    else startListening();
+  };
 
   const analyze = async () => {
     stopListening();
@@ -182,11 +195,25 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
           {phase === 'capture' && (
             <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: listening ? coachColor : colors.glassBg, alignItems: 'center', justifyContent: 'center' }}>
+                <TouchableOpacity
+                  onPress={toggleListening}
+                  disabled={!SpeechModule}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
+                  accessibilityLabel={listening ? 'Stop listening' : 'Start listening'}
+                  style={{
+                    width: 44, height: 44, borderRadius: 22,
+                    backgroundColor: listening ? coachColor : colors.glassBg,
+                    borderWidth: 1, borderColor: listening ? coachColor : colors.glassBorder,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
                   <Mic size={20} color={listening ? getTextOnColor(coachColor) : colors.textMuted} strokeWidth={2.2} />
-                </View>
+                </TouchableOpacity>
                 <Text style={{ ...FONT.body, color: colors.textSecondary, flex: 1 }}>
-                  {SpeechModule ? (listening ? 'Listening — say what you ate…' : 'Speak or type your meal') : 'Type your meal below'}
+                  {SpeechModule
+                    ? (listening ? 'Listening — say what you ate…' : (transcript ? 'Mic paused — tap it to add more' : 'Tap the mic to talk, or type below'))
+                    : 'Type your meal below'}
                 </Text>
               </View>
               <TextInput
