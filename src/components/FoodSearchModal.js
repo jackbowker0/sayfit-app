@@ -348,7 +348,9 @@ export default function FoodSearchModal({
               placeholder="e.g. greek yogurt"
               placeholderTextColor={colors.textDim}
               autoFocus
-              autoCorrect={false}
+              autoCorrect
+              spellCheck
+              autoCapitalize="none"
               returnKeyType="search"
               style={{ flex: 1, paddingVertical: 14, fontSize: 16, color: colors.textPrimary }}
             />
