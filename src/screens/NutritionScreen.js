@@ -232,19 +232,21 @@ export default function NutritionScreen({ navigation }) {
     setVoiceVisible(true);
   };
 
-  // Search/scan pick: the portion step WAS the review — log it directly.
-  const handleFoodPick = async (food, grams, macros) => {
+  // Search/scan pick: the detail screen WAS the review — log it directly.
+  // Its meal selector wins over whichever section the search started from.
+  const handleFoodPick = async (food, grams, macros, meal) => {
     setFoodSearchVisible(false);
     setInitialFood(null);
     haptics.success();
+    const mealType = meal || activeMeal;
     await logMeal({
       source: pickSource,
-      mealType: activeMeal,
+      mealType,
       items: [{ name: food.brand ? `${food.name} (${food.brand})` : food.name, qty: 1 }],
       macros,
       date: logDateIso,
     });
-    capture('meal_logged', { source: pickSource, mealType: activeMeal, hasDescription: true });
+    capture('meal_logged', { source: pickSource, mealType, hasDescription: true });
     addRecentFood(food).catch(() => {});
     await loadData(selectedKey);
   };
@@ -661,6 +663,8 @@ export default function NutritionScreen({ navigation }) {
         colors={colors}
         initialFood={initialFood}
         energyLabel={energyLabel}
+        targets={targets}
+        initialMeal={activeMeal}
       />
 
       <BarcodeScannerModal

@@ -1,11 +1,12 @@
 // ============================================================
-// FOOD SEARCH MODAL — search, pick a serving, add
+// FOOD SEARCH MODAL — search, food detail, add (the MFP flow)
 // ------------------------------------------------------------
-// MFP-clarity rules: result rows show calories for a REAL serving
-// ("72 cal · 1 large") with a Verified tag on lab-standardized USDA
-// entries; picking a food loads its household measures (1 large,
-// 1 cup, …) as serving chips + a quantity stepper — grams are the
-// fallback, not the interface. Recents show when the query is empty.
+// Result rows read "200 cal · 2 cups · Quaker" with a Verified tag
+// on lab-standardized USDA entries. Tapping opens a FOOD DETAIL
+// screen: name/brand, serving size (real household measures),
+// number of servings, which meal it goes to, and every macro shown
+// with the % of the daily goal this portion represents. onPick
+// returns (food, grams, macros, meal).
 // ============================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,9 +18,11 @@ import { Search, X, ChevronLeft, CheckCircle2 } from 'lucide-react-native';
 
 import { FONT, SPACING, RADIUS, getTextOnColor } from '../constants/theme';
 import { searchFoods, getRecentFoods, macrosForPortion, getFoodPortions } from '../services/foodDb';
+import { MEAL_TYPES } from '../services/nutrition';
 import * as haptics from '../services/haptics';
 
 const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
+const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 
 // The serving a person most likely means — "1 medium", "1 large", a standard
 // serving — beats "1 cup (4.86 large eggs)" as the pre-selected default.
@@ -32,7 +35,12 @@ function defaultPortionIndex(portions) {
   return 0;
 }
 
-export default function FoodSearchModal({ visible, onClose, onPick, coachColor, colors, initialFood = null, energyLabel = 'kcal' }) {
+export default function FoodSearchModal({
+  visible, onClose, onPick, coachColor, colors,
+  initialFood = null, energyLabel = 'kcal',
+  targets = {},            // daily macro targets for the "% of goal" column
+  initialMeal = 'snack',   // pre-selected meal section
+}) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [recents, setRecents] = useState([]);
@@ -43,6 +51,7 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
   const [portionIdx, setPortionIdx] = useState(0);
   const [qty, setQty] = useState(1);                    // servings count (0.5 steps)
   const [customGrams, setCustomGrams] = useState(null); // string once the user types grams
+  const [meal, setMeal] = useState(initialMeal);        // which diary section this lands in
   const debounceRef = useRef(null);
 
   // Load recents each time the sheet opens; reset transient state. If opened
@@ -51,6 +60,7 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
     if (!visible) return;
     setQuery(''); setResults([]);
     setSelected(null);
+    setMeal(initialMeal);
     if (initialFood) beginPortioning(initialFood);
     getRecentFoods().then(setRecents).catch(() => setRecents([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,7 +107,7 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
   const confirm = () => {
     if (!selected || !grams || grams <= 0) return;
     haptics.success();
-    onPick(selected, grams, macrosForPortion(selected, grams));
+    onPick(selected, grams, macrosForPortion(selected, grams), meal);
   };
 
   const bumpQty = (delta) => {
@@ -127,40 +137,46 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
           {item.verified && <CheckCircle2 size={13} color={coachColor} strokeWidth={2.4} />}
         </View>
         <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2, fontVariant: ['tabular-nums'] }} numberOfLines={1}>
-          {cal} {energyLabel} · {servingText}{item.brand ? ` · ${item.brand}` : ''} · P{item.per100g.protein}/100g
+          {cal} {energyLabel} · {servingText}{item.brand ? ` · ${item.brand}` : ''}
         </Text>
       </TouchableOpacity>
     );
   };
 
-  // ---- Portion step ----
+  // ---- Food detail (MFP-style) ----
   if (selected) {
     const m = macrosForPortion(selected, grams);
     return (
       <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
         <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
           <View style={{ flex: 1, padding: SPACING.lg }}>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); setSelected(null); }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, alignSelf: 'flex-start' }}
-              accessibilityRole="button" accessibilityLabel="Back to results"
-            >
-              <ChevronLeft size={20} color={coachColor} strokeWidth={2.5} />
-              <Text style={{ ...FONT.caption, color: coachColor, fontWeight: '600' }}>Results</Text>
-            </TouchableOpacity>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }}>
-              <Text style={{ ...FONT.subhead, color: colors.textPrimary, flexShrink: 1 }}>{selected.name}</Text>
-              {selected.verified && <CheckCircle2 size={14} color={coachColor} strokeWidth={2.4} />}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <TouchableOpacity
+                onPress={() => { haptics.tap(); setSelected(null); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 }}
+                accessibilityRole="button" accessibilityLabel="Back to results"
+              >
+                <ChevronLeft size={20} color={coachColor} strokeWidth={2.5} />
+                <Text style={{ ...FONT.caption, color: coachColor, fontWeight: '600' }}>Results</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { haptics.tap(); onClose(); }} style={{ minHeight: 44, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Close">
+                <X size={22} color={colors.textMuted} strokeWidth={2} />
+              </TouchableOpacity>
             </View>
-            {selected.brand ? (
-              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>{selected.brand}</Text>
-            ) : null}
 
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {/* Serving chips */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22, marginBottom: 8 }}>
-                <Text style={{ ...FONT.label, color: colors.textMuted }}>Serving</Text>
+              {/* Name + brand */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                <Text style={{ ...FONT.heading, color: colors.textPrimary, flexShrink: 1 }}>{selected.name}</Text>
+                {selected.verified && <CheckCircle2 size={15} color={coachColor} strokeWidth={2.4} />}
+              </View>
+              <Text style={{ ...FONT.caption, color: colors.textMuted, marginTop: 2 }}>
+                {selected.brand || (selected.verified ? 'USDA verified · generic' : 'Generic')}
+              </Text>
+
+              {/* Serving size */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 24, marginBottom: 8 }}>
+                <Text style={{ ...FONT.label, color: colors.textMuted }}>Serving size</Text>
                 {portionsLoading && <ActivityIndicator size="small" color={coachColor} />}
               </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -187,8 +203,8 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
                 })}
               </View>
 
-              {/* Quantity stepper */}
-              <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 22, marginBottom: 8 }}>How many</Text>
+              {/* Number of servings + custom grams */}
+              <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 22, marginBottom: 8 }}>Number of servings</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <QtyBtn label="−" onPress={() => bumpQty(-0.5)} colors={colors} />
                 <Text style={{ ...FONT.stat, fontSize: 24, color: colors.textPrimary, minWidth: 52, textAlign: 'center', fontVariant: ['tabular-nums'] }}>
@@ -213,26 +229,46 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
                 <Text style={{ ...FONT.caption, color: colors.textMuted }}>g</Text>
               </View>
 
-              {/* Live macro preview */}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 8 }}>
-                {[[energyLabel, m.kcal], ['Protein', m.protein], ['Carbs', m.carbs], ['Fat', m.fat]].map(([label, val]) => (
-                  <View key={label} style={{ alignItems: 'center' }}>
-                    <Text style={{ ...FONT.stat, fontSize: 22, color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>{val}</Text>
-                    <Text style={{ ...FONT.label, fontSize: 10, color: colors.textMuted, marginTop: 2 }}>{label}</Text>
-                  </View>
+              {/* Meal */}
+              <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 22, marginBottom: 8 }}>Meal</Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {MEAL_TYPES.map((mt) => (
+                  <TouchableOpacity
+                    key={mt}
+                    onPress={() => { haptics.tick(); setMeal(mt); }}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Log to ${MEAL_LABELS[mt]}`}
+                    style={{
+                      flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: RADIUS.round,
+                      backgroundColor: meal === mt ? coachColor : colors.glassBg,
+                      borderWidth: 1, borderColor: meal === mt ? coachColor : colors.glassBorder,
+                    }}
+                  >
+                    <Text style={{ ...FONT.caption, fontSize: 12, color: meal === mt ? getTextOnColor(coachColor) : colors.textSecondary }}>
+                      {MEAL_LABELS[mt]}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
+
+              {/* This portion vs daily goals */}
+              <Text style={{ ...FONT.label, color: colors.textMuted, marginTop: 26, marginBottom: 4 }}>This portion · % of daily goal</Text>
+              <GoalRow label={energyLabel === 'kcal' ? 'Calories' : 'Calories'} value={m.kcal} unit="" target={targets?.kcal} colors={colors} accent={coachColor} />
+              <GoalRow label="Protein" value={m.protein} unit="g" target={targets?.protein} colors={colors} accent={coachColor} />
+              <GoalRow label="Carbs" value={m.carbs} unit="g" target={targets?.carbs} colors={colors} accent={coachColor} />
+              <GoalRow label="Fat" value={m.fat} unit="g" target={targets?.fat} colors={colors} accent={coachColor} last />
             </ScrollView>
 
             <TouchableOpacity
               onPress={confirm}
               disabled={grams <= 0}
               activeOpacity={0.85}
-              style={{ backgroundColor: coachColor, paddingVertical: 16, borderRadius: RADIUS.md, alignItems: 'center', opacity: grams <= 0 ? 0.5 : 1 }}
-              accessibilityRole="button" accessibilityLabel="Add to log"
+              style={{ backgroundColor: coachColor, paddingVertical: 16, borderRadius: RADIUS.md, alignItems: 'center', marginTop: 10, opacity: grams <= 0 ? 0.5 : 1 }}
+              accessibilityRole="button" accessibilityLabel={`Add to ${MEAL_LABELS[meal]}`}
             >
               <Text style={{ ...FONT.subhead, color: getTextOnColor(coachColor) }}>
-                Add — {m.kcal} {energyLabel}
+                Add to {MEAL_LABELS[meal].toLowerCase()} — {m.kcal} {energyLabel}
               </Text>
             </TouchableOpacity>
           </View>
@@ -294,6 +330,32 @@ export default function FoodSearchModal({ visible, onClose, onPick, coachColor, 
         </View>
       </SafeAreaView>
     </Modal>
+  );
+}
+
+// One nutrient vs its daily target: value left, "N% of goal" + thin bar
+// right. Number + word carry the state (never hue alone); shows "no goal
+// set" when there's no target instead of a fake percentage.
+function GoalRow({ label, value, unit, target, colors, accent, last = false }) {
+  const hasTarget = typeof target === 'number' && target > 0;
+  const pct = hasTarget ? Math.round((value / target) * 100) : null;
+  return (
+    <View style={{ paddingVertical: 11, borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.glassBorder }}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <Text style={{ ...FONT.body, fontSize: 14, color: colors.textPrimary }}>{label}</Text>
+        <Text style={{ ...FONT.caption, color: colors.textPrimary, fontVariant: ['tabular-nums'] }}>
+          {value}{unit}
+          <Text style={{ color: colors.textMuted }}>
+            {hasTarget ? `  ·  ${pct}% of ${target}${unit}` : '  ·  no goal set'}
+          </Text>
+        </Text>
+      </View>
+      {hasTarget && (
+        <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.bgSubtle, overflow: 'hidden', marginTop: 7 }}>
+          <View style={{ height: 4, width: `${Math.min(pct, 100)}%`, borderRadius: 2, backgroundColor: accent }} />
+        </View>
+      )}
+    </View>
   );
 }
 
