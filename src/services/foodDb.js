@@ -280,26 +280,42 @@ export async function searchFoods(query, { limit = 25 } = {}) {
   return searchOFF(q, limit);
 }
 
+// Compare two barcodes ignoring leading zeros (UPC-A 12-digit vs EAN-13
+// 13-digit are the same product with a leading 0).
+const upcEq = (a, b) => String(a).replace(/^0+/, '') === String(b).replace(/^0+/, '');
+
+async function lookupOFF(barcode) {
+  const data = await offFetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${OFF_FIELDS}`);
+  return data && data.status === 1 ? normalizeProduct(data.product) : null;
+}
+
+async function lookupUSDAByUPC(barcode) {
+  // USDA branded items carry a gtinUpc. A plain query surfaces candidates but
+  // returns noise too — we must CONFIRM the code matches, else we'd log a
+  // random product for an unknown barcode.
+  const data = await usdaFetch(`/foods/search?query=${encodeURIComponent(barcode)}&pageSize=10&dataType=Branded`);
+  const hit = (data?.foods || []).find((f) => f.gtinUpc && upcEq(f.gtinUpc, barcode));
+  return hit ? normalizeUSDA(hit) : null;
+}
+
 /**
- * Barcode lookup. Cache -> Open Food Facts -> USDA branded fallback.
- * Returns a normalized food or null (unknown / offline).
+ * Barcode lookup. Cache first, then Open Food Facts (purpose-built for
+ * barcodes, usually carries a serving size) and USDA branded (matched on
+ * gtinUpc) in PARALLEL — prefer OFF when it has usable data, fall to USDA for
+ * items OFF is missing. Returns a normalized food or null (unknown / offline).
  */
 export async function lookupBarcode(code) {
-  const barcode = String(code || '').trim();
+  const barcode = String(code || '').replace(/\D/g, ''); // scanners can include control chars
   if (!barcode) return null;
 
   const cached = await getCachedBarcode(barcode);
   if (cached) return cached;
 
-  const data = await offFetch(`${OFF_BASE}/api/v2/product/${encodeURIComponent(barcode)}.json?fields=${OFF_FIELDS}`);
-  let food = data && data.status === 1 ? normalizeProduct(data.product) : null;
-
-  if (!food) {
-    // USDA branded is keyed by gtinUpc — a plain query match finds it.
-    const u = await usdaFetch(`/foods/search?query=${encodeURIComponent(barcode)}&pageSize=1&dataType=Branded`);
-    food = (u?.foods || []).map(normalizeUSDA).filter(Boolean)[0] || null;
-  }
-
+  const [off, usda] = await Promise.all([
+    lookupOFF(barcode).catch(() => null),
+    lookupUSDAByUPC(barcode).catch(() => null),
+  ]);
+  const food = off || usda;
   if (food) await cacheBarcode(barcode, food);
   return food;
 }

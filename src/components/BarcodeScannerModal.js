@@ -51,7 +51,7 @@ function centeredMessage(text, colors, action) {
   );
 }
 
-export default function BarcodeScannerModal({ visible, onClose, onFound, coachColor, colors }) {
+export default function BarcodeScannerModal({ visible, onClose, onFound, onSearchByName, coachColor, colors }) {
   // No native camera in this build → graceful fallback, no hooks-order issues
   // because this branch renders a component with no camera hooks.
   if (!CameraModule?.CameraView) {
@@ -64,10 +64,10 @@ export default function BarcodeScannerModal({ visible, onClose, onFound, coachCo
       </Shell>
     );
   }
-  return <ScannerInner CameraModule={CameraModule} visible={visible} onClose={onClose} onFound={onFound} coachColor={coachColor} colors={colors} />;
+  return <ScannerInner CameraModule={CameraModule} visible={visible} onClose={onClose} onFound={onFound} onSearchByName={onSearchByName} coachColor={coachColor} colors={colors} />;
 }
 
-function ScannerInner({ CameraModule, visible, onClose, onFound, coachColor, colors }) {
+function ScannerInner({ CameraModule, visible, onClose, onFound, onSearchByName, coachColor, colors }) {
   const { CameraView, useCameraPermissions } = CameraModule;
   const [permission, requestPermission] = useCameraPermissions();
   const [busy, setBusy] = useState(false);       // looking up a scanned code
@@ -143,26 +143,27 @@ function ScannerInner({ CameraModule, visible, onClose, onFound, coachColor, col
       )}
 
       {notFound && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000a', alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: 16 }]}>
-          <Text style={{ ...FONT.body, color: '#fff', textAlign: 'center' }}>
-            Barcode {notFound} isn't in the food database.
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000c', alignItems: 'center', justifyContent: 'center', padding: SPACING.xl, gap: 8 }]}>
+          <Text style={{ ...FONT.subhead, color: '#fff', textAlign: 'center' }}>
+            Not in the database yet
           </Text>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); setNotFound(null); setHandled(false); }}
-              style={{ borderWidth: 1, borderColor: '#fff', paddingVertical: 12, paddingHorizontal: 20, borderRadius: RADIUS.md }}
-              accessibilityRole="button" accessibilityLabel="Scan again"
-            >
-              <Text style={{ ...FONT.caption, color: '#fff', fontWeight: '600' }}>Scan again</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { haptics.tap(); onClose(); }}
-              style={{ backgroundColor: coachColor, paddingVertical: 12, paddingHorizontal: 20, borderRadius: RADIUS.md }}
-              accessibilityRole="button" accessibilityLabel="Enter manually"
-            >
-              <Text style={{ ...FONT.caption, color: getTextOnColor(coachColor), fontWeight: '700' }}>Enter manually</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={{ ...FONT.caption, color: '#ffffffaa', textAlign: 'center', marginBottom: 12 }}>
+            Barcode {notFound} — search it by name, or scan another.
+          </Text>
+          <TouchableOpacity
+            onPress={() => { haptics.tap(); onSearchByName?.(); }}
+            style={{ backgroundColor: coachColor, paddingVertical: 13, paddingHorizontal: 28, borderRadius: RADIUS.md, alignSelf: 'stretch', alignItems: 'center' }}
+            accessibilityRole="button" accessibilityLabel="Search by name"
+          >
+            <Text style={{ ...FONT.subhead, color: getTextOnColor(coachColor) }}>Search by name</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { haptics.tap(); setNotFound(null); setHandled(false); }}
+            style={{ borderWidth: 1, borderColor: '#fff', paddingVertical: 12, paddingHorizontal: 20, borderRadius: RADIUS.md, alignSelf: 'stretch', alignItems: 'center' }}
+            accessibilityRole="button" accessibilityLabel="Scan again"
+          >
+            <Text style={{ ...FONT.caption, color: '#fff', fontWeight: '600' }}>Scan again</Text>
+          </TouchableOpacity>
         </View>
       )}
     </Shell>

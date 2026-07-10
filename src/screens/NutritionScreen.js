@@ -255,7 +255,15 @@ export default function NutritionScreen({ navigation }) {
     setScanVisible(false);
     setPickSource('barcode');
     setInitialFood(food);
-    setFoodSearchVisible(true); // jumps straight to the portion step
+    setFoodSearchVisible(true); // jumps straight to the food detail step
+  };
+
+  // Missed barcode → fall through to text search (same meal section).
+  const handleScanSearchByName = () => {
+    setScanVisible(false);
+    setPickSource('search');
+    setInitialFood(null);
+    setFoodSearchVisible(true);
   };
 
   // ---- Manual entry ----
@@ -671,6 +679,7 @@ export default function NutritionScreen({ navigation }) {
         visible={scanVisible}
         onClose={() => setScanVisible(false)}
         onFound={handleScanFound}
+        onSearchByName={handleScanSearchByName}
         coachColor={coach.color}
         colors={colors}
       />
