@@ -163,38 +163,72 @@ export function macrosForPortion(food, grams) {
 
 // ---- SEARCH ----
 
-// Qualifier words that usually mean "not the plain food I searched for". A
-// branded entry literally named "Egg" is often dried/powdered junk data with a
-// wildly wrong per-100g value — this + the generic boost keep those out of the
-// default slot (they inflate calories 3-4x, the source of bogus totals).
-const VARIANT = /(white|substitute|powder|dried|dehydrated|imitation|infant|baby food|concentrate|drink mix|non-?dairy|meatless)/i;
+// Prepared/derivative FORMS — a different food than the plain base someone
+// searched. Penalized hard when in the entry name but not the query, so
+// "Flour, rice" loses to rice, "Salmon salad"/"Fish oil" lose to salmon,
+// "Egg, dried, powder" (junk per-100g data) loses to the whole egg.
+const DERIVATIVE = /\b(flour|salad|soup|sauce|gravy|juice|oil|dip|spread|snacks?|dessert|pudding|smoothie|shake|crackers?|chips?|cakes?|pie|rolls?|sandwich|wrap|casserole|patties|patty|nuggets?|sticks?|bites?|loaf|jerky|dressing|seasoning|marinade|breaded|creamed|babyfood|baby|infant|lemonade|punch|powder|powdered|dried|dehydrated|substitute|imitation|concentrate|meatless|non-?dairy)\b/i;
+// Words that DON'T change food identity — "free", don't count as an extra
+// variant. (Identity words like whole/white/lean are deliberately excluded.)
+const DESCRIPTOR = new Set(('raw cooked fresh frozen fluid plain regular ns nfs nsa unspecified '
+  + 'added vitamin a d with without includes boneless skinless lowfat low nonfat non reduced fat '
+  + 'free content grade large medium small and or the all style type prepared drained solids each '
+  + 'unenriched enriched of as to no in from').split(' '));
+// USDA taxonomic category prefixes — the leading token is a shelf category,
+// not an extra ingredient, so "Fish, salmon" still matches "salmon" cleanly.
+const CATEGORY = new Set(('fish beef pork veal lamb poultry chicken turkey cheese cereals '
+  + 'beverages nuts seeds crustaceans mollusks fruit vegetables').split(' '));
 
 // Punctuation-blind normalization: "McDONALD'S," and "mcdonalds" must match.
 const normText = (s) => (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 // A word matches if the haystack has it or its singular ("eggs" -> "egg").
 const wordIn = (hay, w) => hay.includes(w) || (w.endsWith('s') && hay.includes(w.slice(0, -1)));
 
+// Rank a candidate against the query. Tuned offline against real USDA results
+// for ~24 common foods (rice, milk, eggs, beef, salmon, brand names, ...);
+// see scratchpad/test-scorer.js. Higher = better.
 function scoreMatch(name, brand, query, tier) {
   const q = normText(query);
   const nameN = normText(name);
-  const hay = brand ? `${nameN} ${normText(brand)}` : nameN;
+  const brandN = normText(brand);
   const words = q.split(' ').filter(Boolean);
+  const qSet = new Set(words.flatMap((w) => (w.endsWith('s') ? [w, w.slice(0, -1)] : [w])));
   // Data-quality tier: Foundation/SR Legacy (10) > FNDDS survey (8) > branded
   // (0, crowd-sourced). Keeps junk branded data out of the default slot.
   let s = tier || 0;
+
   if (nameN === q || nameN.startsWith(q + ' ')) s += 4;
   else if (words[0] && nameN.startsWith(words[0])) s += 2;
-  // Matching ALL the words the user typed is decisive — "mcdonalds fries"
-  // must beat every other McDonald's item, and "quest protein bar" (all
-  // words, branded) must beat a generic that only matches "protein bar".
-  // The bonus outweighs the tier gap on purpose; plural-aware wordIn means
-  // a generic that truly matches ("eggs"->"egg") gets it too and its tier
-  // still decides against exact-named branded junk.
-  const hits = words.filter((w) => wordIn(hay, w)).length;
-  s += (words.length && hits === words.length) ? 14 : hits;
-  s -= nameN.length / 60;                                   // gentle concise-name tiebreak
-  if (VARIANT.test(nameN) && !VARIANT.test(q)) s -= 3;      // don't default to a variant
-  if (/\b(whole|raw)\b/.test(nameN)) s += 0.6;             // prefer the plain base form
+
+  // Match strength: all words in the NAME (strong) beats all words only via
+  // the BRAND (weaker) beats partial. "coca cola" -> the Coke product (name)
+  // over Minute Maid Lemonade [The Coca-Cola company] (brand-only match).
+  const nameHits = words.filter((w) => wordIn(nameN, w)).length;
+  const fullHits = words.filter((w) => wordIn(`${nameN} ${brandN}`, w)).length;
+  if (words.length && nameHits === words.length) s += 14;
+  else if (words.length && fullHits === words.length) s += 7;
+  else s += fullHits;
+
+  // Head-noun: USDA files the base food first ("Milk, whole"; "Rice, white").
+  const headNoun = words[words.length - 1];
+  const firstTok = nameN.split(' ')[0];
+  if (headNoun && firstTok && wordIn(firstTok, headNoun)) s += 3;
+
+  // Coverage: reward entries that are ONLY about what was searched. A name word
+  // that isn't in the query, isn't a plain descriptor, and isn't the leading
+  // USDA category is an "extra" — a variant the user didn't ask for. This is
+  // what makes "Milk, whole" beat "Milk, buttermilk" and "Beans and brown rice".
+  const toks = nameN.split(' ');
+  const extras = toks.filter(
+    (w, i) => w.length > 1 && !qSet.has(w) && !DESCRIPTOR.has(w) && !/^\d/.test(w)
+      && !(i === 0 && CATEGORY.has(w)),
+  ).length;
+  s -= extras * 1.5;
+  if (extras === 0 && words.length && nameHits === words.length) s += 4; // clean match
+  if (/\b(whole|raw)\b/.test(nameN)) s += 0.8;                           // plain base form
+
+  s -= nameN.length / 120;
+  if (DERIVATIVE.test(nameN) && !DERIVATIVE.test(q)) s -= 8;
   return s;
 }
 
@@ -205,7 +239,10 @@ async function searchUSDA(query, limit) {
   const url = (types, size) =>
     `/foods/search?query=${encodeURIComponent(query)}&pageSize=${size}&dataType=${encodeParam(types)}`;
   const [gen, brand] = await Promise.all([
-    usdaFetch(url('Foundation,SR Legacy,Survey (FNDDS)', Math.max(10, Math.ceil(limit / 2)))),
+    // Full page of generic candidates — the accurate plain foods ("Rice,
+    // brown, cooked") are sometimes ranked below flour/snack forms by USDA's
+    // own relevance, so a small page can miss them entirely.
+    usdaFetch(url('Foundation,SR Legacy,Survey (FNDDS)', limit)),
     usdaFetch(url('Branded', limit)),
   ]);
   if (!gen && !brand) return null; // source unavailable (distinct from "no matches")
