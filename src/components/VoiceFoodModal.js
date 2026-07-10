@@ -20,8 +20,10 @@ import { Mic, X, Trash2, ChevronLeft, Search, RefreshCw } from 'lucide-react-nat
 import { FONT, SPACING, RADIUS, getTextOnColor } from '../constants/theme';
 import { parseFoodText, isAIAvailable } from '../services/ai';
 import { resolveFoodItems, searchFoods, macrosForPortion, addRecentFood } from '../services/foodDb';
-import { logMeal } from '../services/nutrition';
+import { logMeal, MEAL_TYPES } from '../services/nutrition';
 import * as haptics from '../services/haptics';
+
+const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snacks' };
 
 let SpeechModule = null;
 let useSpeechEvent = () => {};
@@ -33,11 +35,12 @@ try {
 
 const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
 
-export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 'snack', coachColor, colors, energyLabel = 'kcal' }) {
+export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 'snack', date = null, coachColor, colors, energyLabel = 'kcal' }) {
   const [phase, setPhase] = useState('capture'); // capture | analyzing | review | swap
   const [transcript, setTranscript] = useState('');
   const [listening, setListening] = useState(false);
   const [items, setItems] = useState([]);
+  const [meal, setMeal] = useState(mealType); // user can re-bucket in review
   const [error, setError] = useState(null);
 
   // swap phase
@@ -49,6 +52,7 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
   useEffect(() => {
     if (visible) {
       setPhase('capture'); setTranscript(''); setItems([]); setError(null); setSwapId(null);
+      setMeal(mealType);
       startListening();
     } else {
       stopListening();
@@ -144,9 +148,10 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
     // (that state is for un-reviewed auto-estimates only).
     await logMeal({
       source: 'voice',
-      mealType,
+      mealType: meal,
       items: matched.map((it) => ({ name: it.food.name, qty: 1 })),
       macros: total,
+      date, // null = now; a past-day view passes that day's date
       editState: 'confirmed',
     });
     matched.forEach((it) => addRecentFood(it.food).catch(() => {}));
@@ -212,6 +217,27 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
           {/* REVIEW */}
           {phase === 'review' && (
             <>
+              {/* Which meal this lands in — default by time of day, tap to change */}
+              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+                {MEAL_TYPES.map((mt) => (
+                  <TouchableOpacity
+                    key={mt}
+                    onPress={() => { haptics.tick(); setMeal(mt); }}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Log to ${MEAL_LABELS[mt]}`}
+                    style={{
+                      flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: RADIUS.round,
+                      backgroundColor: meal === mt ? coachColor : colors.glassBg,
+                      borderWidth: 1, borderColor: meal === mt ? coachColor : colors.glassBorder,
+                    }}
+                  >
+                    <Text style={{ ...FONT.caption, fontSize: 12, color: meal === mt ? getTextOnColor(coachColor) : colors.textSecondary }}>
+                      {MEAL_LABELS[mt]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
               <Text style={{ ...FONT.caption, color: colors.textMuted, marginBottom: 12 }}>
                 Tap a food to change the match · edit the amount · remove anything off.
               </Text>
@@ -271,7 +297,7 @@ export default function VoiceFoodModal({ visible, onClose, onLogged, mealType = 
                 </Text>
               </View>
               <PrimaryButton
-                label={`Log ${matched.length} item${matched.length === 1 ? '' : 's'}`}
+                label={`Log ${matched.length} item${matched.length === 1 ? '' : 's'} to ${MEAL_LABELS[meal].toLowerCase()}`}
                 onPress={logIt}
                 disabled={matched.length === 0}
                 coachColor={coachColor}

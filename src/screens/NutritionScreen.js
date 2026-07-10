@@ -40,6 +40,7 @@ import * as haptics from '../services/haptics';
 import { capture } from '../services/posthog';
 import GlassCard from '../components/GlassCard';
 import PressableScale from '../components/PressableScale';
+import SwipeToDelete from '../components/SwipeToDelete';
 import ProgressRing from '../components/ProgressRing';
 import WeekStrip from '../components/WeekStrip';
 import FoodSearchModal from '../components/FoodSearchModal';
@@ -227,8 +228,6 @@ export default function NutritionScreen({ navigation }) {
   const openSearchFor = (meal) => { setActiveMeal(meal); setPickSource('search'); setInitialFood(null); setFoodSearchVisible(true); };
   const openScan = () => { setActiveMeal(mealForNow()); setScanVisible(true); };
   const openVoice = () => {
-    // Voice logs "what I just ate" — always today; snap the view there.
-    setSelectedKey(todayKey);
     setActiveMeal(mealForNow());
     setVoiceVisible(true);
   };
@@ -520,11 +519,15 @@ export default function NutritionScreen({ navigation }) {
                         const name = entry.items?.map((it) => it.name).join(', ') || cap(entry.mealType);
                         return (
                           <View key={entry.id}>
+                            <SwipeToDelete
+                              colors={colors}
+                              onDelete={async () => { await deleteMeal(entry.id); await loadData(selectedKey); }}
+                            >
                             <PressableScale
                               onPress={() => onEntryPress(entry)}
                               scaleTo={0.985}
-                              accessibilityLabel={`${name}, ${entry.macros.kcal} ${energyLabel}`}
-                              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, minHeight: 56 }}
+                              accessibilityLabel={`${name}, ${entry.macros.kcal} ${energyLabel}. Swipe left to delete.`}
+                              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, minHeight: 56, backgroundColor: colors.glassBg }}
                             >
                               <View style={{ flex: 1, paddingRight: 10, paddingVertical: 9 }}>
                                 <Text style={{ ...FONT.body, fontSize: 14, lineHeight: 19, color: colors.textPrimary }} numberOfLines={1}>{name}</Text>
@@ -537,6 +540,7 @@ export default function NutritionScreen({ navigation }) {
                                 {fmt(entry.macros.kcal)}
                               </Text>
                             </PressableScale>
+                            </SwipeToDelete>
                             {i < items.length - 1 && (
                               <View style={{ height: 1, backgroundColor: colors.glassBorder, marginLeft: 16 }} />
                             )}
@@ -670,8 +674,9 @@ export default function NutritionScreen({ navigation }) {
       <VoiceFoodModal
         visible={voiceVisible}
         onClose={() => setVoiceVisible(false)}
-        onLogged={() => loadData(todayKey)}
+        onLogged={() => loadData(selectedKey)}
         mealType={activeMeal}
+        date={logDateIso}
         coachColor={coach.color}
         colors={colors}
         energyLabel={energyLabel}
