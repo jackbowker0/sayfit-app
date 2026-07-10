@@ -242,7 +242,7 @@ export default function DashboardScreen({ navigation }) {
       Icon: Camera,
       label: 'Snap Meal',
       status: mealStatus,
-      attention: pending > 0 ? 'due' : 'none',
+      attention: 'none',
       onPress: () => navigation.navigate('FuelTab'),
     };
 
