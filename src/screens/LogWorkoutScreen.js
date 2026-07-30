@@ -667,7 +667,40 @@ export default function LogWorkoutScreen({ navigation }) {
   const addSet = (exIndex) => {
     haptics.tap();
     const updated = [...exercises]; const lastSet = updated[exIndex].sets[updated[exIndex].sets.length - 1];
-    updated[exIndex] = { ...updated[exIndex], sets: [...updated[exIndex].sets, { ...lastSet }] }; setExercises(updated);
+    // A new set is a WORKING set even when cloned from a warmup row.
+    updated[exIndex] = { ...updated[exIndex], sets: [...updated[exIndex].sets, { ...lastSet, warmup: false }] };
+    setExercises(updated);
+  };
+
+  /**
+   * Prepend a ramp-up set. Seeds it at ~55% of the first working set's weight,
+   * higher reps — the standard first ramp. Warmup sets are logged but excluded
+   * from PRs, volume, and progression.
+   */
+  const addWarmupSet = (exIndex) => {
+    haptics.tap();
+    const updated = [...exercises];
+    const sets = updated[exIndex].sets;
+    const firstWorking = sets.find((s) => !s.warmup) || sets[0] || { reps: 8, weight: 0 };
+    const warm = {
+      reps: Math.min(12, (parseInt(firstWorking.reps, 10) || 8) + 2),
+      weight: Math.round(((parseFloat(firstWorking.weight) || 0) * 0.55) / 5) * 5,
+      warmup: true,
+    };
+    const lastWarmIdx = sets.reduce((acc, s, i) => (s.warmup ? i : acc), -1);
+    const next = [...sets];
+    next.splice(lastWarmIdx + 1, 0, warm);
+    updated[exIndex] = { ...updated[exIndex], sets: next };
+    setExercises(updated);
+  };
+
+  const toggleWarmup = (exIndex, setIndex) => {
+    haptics.tick();
+    const updated = [...exercises];
+    updated[exIndex] = { ...updated[exIndex], sets: [...updated[exIndex].sets] };
+    const s = updated[exIndex].sets[setIndex];
+    updated[exIndex].sets[setIndex] = { ...s, warmup: !s.warmup };
+    setExercises(updated);
   };
 
   const removeSet = (exIndex, setIndex) => {
@@ -1325,16 +1358,28 @@ export default function LogWorkoutScreen({ navigation }) {
                 </View>
                 {ex.sets.map((set, setIndex) => {
                   const isDone = !!completedSets[`${exIndex}-${setIndex}`];
+                  // Working sets number 1,2,3… ignoring ramp sets above them.
+                  const workingNum = ex.sets.slice(0, setIndex + 1).filter((s) => !s.warmup).length;
                   return (
                     <React.Fragment key={setIndex}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1, opacity: isDone ? 0.5 : 1 }}>
-                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1, opacity: isDone ? 0.5 : set.warmup ? 0.7 : 1 }}>
+                        <TouchableOpacity
+                          onPress={() => toggleWarmup(exIndex, setIndex)}
+                          disabled={isDone}
+                          style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={set.warmup ? `Warmup set, tap to make it a working set` : `Working set ${workingNum}, tap to mark as warmup`}
+                        >
                           {isDone ? (
                             <Check size={13} color={colors.green} strokeWidth={2.5} />
+                          ) : set.warmup ? (
+                            <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: coach.color }}>
+                              <Text style={{ ...FONT.label, fontSize: 9, color: coach.color }}>WARM</Text>
+                            </View>
                           ) : (
-                            <Text style={{ ...FONT.caption, fontSize: 13, color: colors.textMuted }}>{setIndex + 1}</Text>
+                            <Text style={{ ...FONT.caption, fontSize: 13, color: colors.textMuted }}>{workingNum}</Text>
                           )}
-                        </View>
+                        </TouchableOpacity>
                         <TextInput style={{
                           flex: 1, backgroundColor: isDark ? colors.glassBg : colors.bgInput,
                           borderRadius: 6, borderWidth: 1, borderColor: colors.glassBorder,
@@ -1389,13 +1434,16 @@ export default function LogWorkoutScreen({ navigation }) {
                     </React.Fragment>
                   );
                 })}
-                <TouchableOpacity style={{
-                  alignItems: 'center', paddingTop: 6,
-                  flexDirection: 'row', justifyContent: 'center', gap: 4,
-                }} onPress={() => addSet(exIndex)}>
-                  <Plus size={12} color={coach.color} strokeWidth={2.5} />
-                  <Text style={{ ...FONT.caption, color: coach.color }}>Add Set</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 18, paddingTop: 6 }}>
+                  <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => addWarmupSet(exIndex)}>
+                    <Plus size={12} color={colors.textMuted} strokeWidth={2.5} />
+                    <Text style={{ ...FONT.caption, color: colors.textMuted }}>Warmup</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} onPress={() => addSet(exIndex)}>
+                    <Plus size={12} color={coach.color} strokeWidth={2.5} />
+                    <Text style={{ ...FONT.caption, color: coach.color }}>Add Set</Text>
+                  </TouchableOpacity>
+                </View>
               </GlassCard>
             );
           })}

@@ -42,6 +42,17 @@ function ceilingForUnit(unit) {
   return unit === 'kg' ? SANE_WEIGHT_CEILING_LBS / LBS_PER_KG : SANE_WEIGHT_CEILING_LBS;
 }
 
+/**
+ * Working sets only — ramp-up/warmup sets are logged for the record but must
+ * never count toward PRs, progression suggestions, or volume. A light 10-rep
+ * ramp set would otherwise write a bogus rep PR and drag every stat down.
+ * Falls back to all sets if an exercise is somehow all-warmup.
+ */
+export function workingSets(sets = []) {
+  const working = sets.filter((s) => !s.warmup);
+  return working.length > 0 ? working : [];
+}
+
 // ---- COMPOUND EXERCISES (used for smart rest) ----
 const COMPOUND_EXERCISES = [
   'squat', 'front squat', 'back squat', 'bulgarian split squat',
@@ -183,9 +194,12 @@ async function checkAndUpdatePRs(session) {
 
   for (const exercise of session.exercises) {
     const name = normalizeExerciseName(exercise.name);
-    const maxWeight = Math.max(...exercise.sets.map(s => s.weight || 0));
-    const maxVolume = Math.max(...exercise.sets.map(s => (s.weight || 0) * (s.reps || 0)));
-    const maxReps = Math.max(...exercise.sets.map(s => s.reps || 0));
+    // Warmup/ramp sets never write PRs.
+    const scored = workingSets(exercise.sets);
+    if (scored.length === 0) continue;
+    const maxWeight = Math.max(...scored.map(s => s.weight || 0));
+    const maxVolume = Math.max(...scored.map(s => (s.weight || 0) * (s.reps || 0)));
+    const maxReps = Math.max(...scored.map(s => s.reps || 0));
 
     // Data-integrity backstop: never let an implausible weight write a permanent
     // PR. The UI outlier gate (checkWeightOutliers) is the primary guard; this
@@ -390,15 +404,21 @@ export async function getExerciseHistory(exerciseName) {
   for (const entry of log) {
     for (const ex of entry.exercises) {
       if (normalizeExerciseName(ex.name) === name) {
+        // Every stat below is WORKING sets only — ramp-up sets are recorded on
+        // the session but must not move bestWeight, volume, or the "what should
+        // I lift today" suggestion. `sets` keeps warmups so the log reads true.
+        const scored = workingSets(ex.sets);
+        if (scored.length === 0) continue;
         sessions.push({
           date: entry.date,
           sessionId: entry.id,
           sets: ex.sets,
-          bestWeight: Math.max(...ex.sets.map(s => s.weight || 0)),
-          bestVolume: Math.max(...ex.sets.map(s => (s.weight || 0) * (s.reps || 0))),
-          totalVolume: ex.sets.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0),
-          totalSets: ex.sets.length,
-          totalReps: ex.sets.reduce((sum, s) => sum + (s.reps || 0), 0),
+          workingSets: scored,
+          bestWeight: Math.max(...scored.map(s => s.weight || 0)),
+          bestVolume: Math.max(...scored.map(s => (s.weight || 0) * (s.reps || 0))),
+          totalVolume: scored.reduce((sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0),
+          totalSets: scored.length,
+          totalReps: scored.reduce((sum, s) => sum + (s.reps || 0), 0),
         });
       }
     }
@@ -414,7 +434,8 @@ export async function getExerciseHistory(exerciseName) {
 export async function getLastSessionSets(exerciseName) {
   const history = await getExerciseHistory(exerciseName);
   if (history.length === 0) return null;
-  return history[history.length - 1].sets;
+  // Ghost hints should show what he actually worked with, not his ramp sets.
+  return history[history.length - 1].workingSets;
 }
 
 export async function compareToLast(exerciseName, currentSets) {
