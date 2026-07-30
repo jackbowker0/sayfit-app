@@ -110,10 +110,10 @@ const STARTER_TEMPLATES = [
     name: 'Upper A — Push (Mon)',
     exercises: [
       { name: 'Incline Dumbbell Press', sets: setsOf(4, 7) },
-      { name: 'Chest Supported Row', sets: setsOf(4, 9) },
+      { name: 'T-Bar Row', sets: setsOf(4, 9) },
       { name: 'Cable Lateral Raise', sets: setsOf(3, 14) },
       { name: 'Face Pull', sets: setsOf(3, 18) },
-      { name: 'Overhead Tricep Extension', sets: setsOf(3, 11) },
+      { name: 'Skull Crushers', sets: setsOf(3, 11) },
       { name: 'Incline Dumbbell Curl', sets: setsOf(3, 11) },
       { name: 'Cable Crunch', sets: setsOf(3, 14) },
     ],
@@ -122,7 +122,7 @@ const STARTER_TEMPLATES = [
     id: 'starter_lower_a',
     name: 'Lower A — Quads (Tue)',
     exercises: [
-      { name: 'Hack Squat', sets: setsOf(4, 9) },
+      { name: 'Pendulum Squat', sets: setsOf(4, 9) },
       { name: 'Split Squat', sets: setsOf(3, 9) },
       { name: 'Seated Leg Curl', sets: setsOf(3, 11) },
       { name: 'Leg Extension', sets: setsOf(3, 14) },
@@ -135,7 +135,7 @@ const STARTER_TEMPLATES = [
     name: 'Upper B — Pull (Thu)',
     exercises: [
       { name: 'Lat Pulldown', sets: setsOf(4, 9) },
-      { name: 'Seated Dumbbell Shoulder Press', sets: setsOf(3, 9) },
+      { name: 'Machine Chest Press', sets: setsOf(3, 9) },
       { name: 'Seated Cable Row', sets: setsOf(3, 11) },
       { name: 'Rear Delt Fly', sets: setsOf(3, 15) },
       { name: 'Prone Y Raise', sets: setsOf(3, 12) },
@@ -148,12 +148,23 @@ const STARTER_TEMPLATES = [
     id: 'starter_lower_b',
     name: 'Lower B — Posterior (Fri)',
     exercises: [
-      { name: 'Trap Bar Deadlift', sets: setsOf(4, 7) },
+      { name: 'Hip Thrust', sets: setsOf(4, 8) },
       { name: 'Bulgarian Split Squat', sets: setsOf(3, 10) },
       { name: 'Lying Leg Curl', sets: setsOf(3, 11) },
       { name: 'Back Extension', sets: setsOf(3, 14) },
       { name: 'Seated Calf Raise', sets: setsOf(4, 13) },
       { name: 'Suitcase Carry', sets: setsOf(3, 40) },
+    ],
+  },
+  {
+    id: 'starter_arms_sat',
+    name: 'Arms + Delts (Sat, optional)',
+    exercises: [
+      { name: 'Cable Lateral Raise', sets: setsOf(3, 17) },
+      { name: 'Rear Delt Fly', sets: setsOf(3, 17) },
+      { name: 'Preacher Curl', sets: setsOf(3, 11) },
+      { name: 'Tricep Pushdown', sets: setsOf(3, 14) },
+      { name: 'Hammer Curl', sets: setsOf(3, 13) },
     ],
   },
 ];
