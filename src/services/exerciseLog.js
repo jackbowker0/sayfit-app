@@ -773,7 +773,7 @@ export const COMMON_EXERCISES = [
   'Calf Raise', 'Standing Calf Raise', 'Seated Calf Raise',
   'Hip Thrust', 'Glute Bridge', 'Back Extension',
   'Lateral Raise', 'Cable Lateral Raise', 'Front Raise', 'Face Pull',
-  'Rear Delt Fly', 'Prone Y Raise',
+  'Rear Delt Fly', 'Reverse Pec Deck', 'Prone Y Raise', 'External Rotation',
   'Cable Fly', 'Dumbbell Fly',
   'Plank', 'Side Plank', 'Ab Rollout', 'Cable Crunch',
   'Pallof Press', 'Dead Bug', 'Suitcase Carry',
