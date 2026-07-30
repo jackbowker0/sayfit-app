@@ -3,3 +3,5 @@ intent: 'SayFit revival: voice-log lifts + photo-log meals (frictionless), one "
 lane: build
 type: other
 ship_target: App Store / Expo
+status: parked
+# Parked 2026-07-28 to free a WIP slot for certs-app revival (real inbound beta demand). Was idle 18d. Unpark after Sec+ or when certs-app ships/parks.

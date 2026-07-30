@@ -95,61 +95,65 @@ const PRESETS = [
 const REST_OPTIONS = [60, 90, 120, 180];
 
 // ─── STARTER TEMPLATES ──────────────────────────────────────────
+// The 4-day upper/lower split, built around a desk job + a back and
+// neck that hurt: no barbell back squat, no conventional deadlift, no
+// bent-over barbell row. Loaded spine is replaced with supported
+// variants (hack squat, chest-supported row, trap bar) so the hard
+// sets are hard on the muscle, not on the spine. Every day carries
+// posture work (face pulls, rear delts, lower traps) and anti-extension
+// core, which is the part that actually pays the back back.
+const setsOf = (n, reps) => Array.from({ length: n }, () => ({ reps, weight: 0 }));
+
 const STARTER_TEMPLATES = [
   {
-    id: 'starter_push',
-    name: 'Push Day',
+    id: 'starter_upper_a',
+    name: 'Upper A — Push (Mon)',
     exercises: [
-      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Overhead Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Incline Dumbbell Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
-      { name: 'Lateral Raise', sets: [{ reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }] },
-      { name: 'Tricep Pushdown', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Incline Dumbbell Press', sets: setsOf(4, 7) },
+      { name: 'Chest Supported Row', sets: setsOf(4, 9) },
+      { name: 'Cable Lateral Raise', sets: setsOf(3, 14) },
+      { name: 'Face Pull', sets: setsOf(3, 18) },
+      { name: 'Overhead Tricep Extension', sets: setsOf(3, 11) },
+      { name: 'Incline Dumbbell Curl', sets: setsOf(3, 11) },
+      { name: 'Cable Crunch', sets: setsOf(3, 14) },
     ],
   },
   {
-    id: 'starter_pull',
-    name: 'Pull Day',
+    id: 'starter_lower_a',
+    name: 'Lower A — Quads (Tue)',
     exercises: [
-      { name: 'Deadlift', sets: [{ reps: 5, weight: 0 }, { reps: 5, weight: 0 }, { reps: 5, weight: 0 }] },
-      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Pull Ups', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Cable Row', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
-      { name: 'Bicep Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
+      { name: 'Hack Squat', sets: setsOf(4, 9) },
+      { name: 'Split Squat', sets: setsOf(3, 9) },
+      { name: 'Seated Leg Curl', sets: setsOf(3, 11) },
+      { name: 'Leg Extension', sets: setsOf(3, 14) },
+      { name: 'Standing Calf Raise', sets: setsOf(4, 12) },
+      { name: 'Pallof Press', sets: setsOf(3, 10) },
     ],
   },
   {
-    id: 'starter_legs',
-    name: 'Leg Day',
+    id: 'starter_upper_b',
+    name: 'Upper B — Pull (Thu)',
     exercises: [
-      { name: 'Squat', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Leg Press', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
-      { name: 'Romanian Deadlift', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
-      { name: 'Leg Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
-      { name: 'Calf Raise', sets: [{ reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }, { reps: 15, weight: 0 }] },
+      { name: 'Lat Pulldown', sets: setsOf(4, 9) },
+      { name: 'Seated Dumbbell Shoulder Press', sets: setsOf(3, 9) },
+      { name: 'Seated Cable Row', sets: setsOf(3, 11) },
+      { name: 'Rear Delt Fly', sets: setsOf(3, 15) },
+      { name: 'Prone Y Raise', sets: setsOf(3, 12) },
+      { name: 'Hammer Curl', sets: setsOf(3, 11) },
+      { name: 'Tricep Pushdown', sets: setsOf(3, 14) },
+      { name: 'Ab Rollout', sets: setsOf(3, 10) },
     ],
   },
   {
-    id: 'starter_upper',
-    name: 'Upper Body',
+    id: 'starter_lower_b',
+    name: 'Lower B — Posterior (Fri)',
     exercises: [
-      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Overhead Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
-      { name: 'Pull Ups', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Bicep Curl', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
-      { name: 'Tricep Pushdown', sets: [{ reps: 12, weight: 0 }, { reps: 12, weight: 0 }] },
-    ],
-  },
-  {
-    id: 'starter_fullbody',
-    name: 'Full Body',
-    exercises: [
-      { name: 'Squat', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Bench Press', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Barbell Row', sets: [{ reps: 8, weight: 0 }, { reps: 8, weight: 0 }, { reps: 8, weight: 0 }] },
-      { name: 'Overhead Press', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
-      { name: 'Romanian Deadlift', sets: [{ reps: 10, weight: 0 }, { reps: 10, weight: 0 }] },
+      { name: 'Trap Bar Deadlift', sets: setsOf(4, 7) },
+      { name: 'Bulgarian Split Squat', sets: setsOf(3, 10) },
+      { name: 'Lying Leg Curl', sets: setsOf(3, 11) },
+      { name: 'Back Extension', sets: setsOf(3, 14) },
+      { name: 'Seated Calf Raise', sets: setsOf(4, 13) },
+      { name: 'Suitcase Carry', sets: setsOf(3, 40) },
     ],
   },
 ];
